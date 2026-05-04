@@ -17,6 +17,7 @@ car_parking/.env.local
 
 # Poetry / virtualenv
 .venv/
+.ml_env/
 
 # IDE
 .vscode/
