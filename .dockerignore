@@ -1,0 +1,10 @@
+**__pycache__
+.vscode
+car_parking/Logo
+car_parking/migrations
+car_parking/alembic.ini
+car_parking/.example.env
+car_parking/docker-compose.yml
+car_parking/python-version
+.gitignore
+.gitattributes

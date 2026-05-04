@@ -1,0 +1,37 @@
+services:
+  car_parking_postgres:
+    image: postgres:15-alpine
+    container_name: car_parking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: car_parking_dev_db
+      POSTGRES_USER: car_parking_user
+      POSTGRES_PASSWORD: car_parking_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - car_parking_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U car_parking_user -d car_parking_dev_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  car_parking_redis:
+    image: redis:7-alpine
+    container_name: car_parking_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - car_parking_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  car_parking_postgres_data:
+  car_parking_redis_data:
