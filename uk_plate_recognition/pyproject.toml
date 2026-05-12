@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "uk-plate-recognition"
+version = "0.1.0"
+description = "Runtime UK license plate recognition package"
+authors = ["KossKokos <koskokos0@gmail.com>"]
+packages = [
+    { include = "anpr", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11"
+torch = ">=2.2,<3.0"
+numpy = "1.26.4"
+opencv-python = "4.9.0.80"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

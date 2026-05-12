@@ -17,6 +17,7 @@ car_parking/.env.local
 
 # Poetry / virtualenv
 .venv/
+.ml_env/
 
 # IDE
 .vscode/
@@ -29,3 +30,12 @@ Thumbs.db
 # Project generated files
 car_parking/csv_files/*.csv
 !car_parking/csv_files/.gitkeep
+
+#uk_plate_recognition
+uk_plate_recognition/chars_reader.ipynb
+uk_plate_recognition/cars_imgs
+uk-plate-recognition_structure.txt
+uk_plate_recognition/.pytest_cache/
+uk_plate_recognition/src/**/__pycache__/
+uk_plate_recognition/data/raw/
+uk_plate_recognition/outputs/

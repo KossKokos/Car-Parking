@@ -1,0 +1,48 @@
+# requirements.txt
+# Python: 3.11.0
+# Project scope: ML process only for UK license plate recognition
+# Main flow:
+# plate crop -> PyTorch recogniser -> clean text -> UK validation
+#
+# NOTE ABOUT PYTORCH CPU INSTALL:
+# For a CPU-only machine, the safest PyTorch install command is usually:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+# If you install everything directly from this file, pip will choose compatible wheels
+# from PyPI, but they may be larger depending on your OS/platform.
+
+# Roboflow public model
+aiohappyeyeballs==2.6.1
+
+# Core deep learning
+torch>=2.2,<3.0
+torchvision>=0.17,<1.0
+
+# Computer vision and image processing
+opencv-python-headless>=4.9,<5.0
+albumentations>=2.0,<3.0
+Pillow>=10.0,<12.0
+
+# Data handling
+numpy>=1.26,<2.0
+pandas>=2.2,<3.0
+scikit-learn>=1.5,<2.0
+
+# Training utilities
+torchmetrics>=1.4,<2.0
+tqdm>=4.66,<5.0
+PyYAML>=6.0,<7.0
+rich>=13.7,<15.0
+
+# Visualisation and experiment notebooks
+matplotlib>=3.8,<4.0
+jupyterlab>=4.0,<5.0
+ipykernel>=6.29,<7.0
+
+# Testing small utilities such as label parsing, decoding, and UK plate validation
+pytest>=8.0,<9.0
+
+# Optional OCR baselines for comparison only.
+# Keep commented unless you specifically want to benchmark them.
+# easyocr>=1.7,<2.0
+# pytesseract>=0.3,<1.0
