@@ -11,6 +11,23 @@ from anpr.inference.result import PlateRecognitionResult
 REQUIRED_ROBOFLOW_BOX_KEYS = {"x", "y", "width", "height"}
 
 
+def normalise_detection_class_name(value: str) -> str:
+    """
+    Normalise detector class names so Roboflow labels like:
+        number-plates
+        number plates
+        number_plates
+    can be compared safely.
+    """
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+
+
 @dataclass(frozen=True)
 class ANPRPipelineResult:
     """
@@ -86,29 +103,63 @@ def select_best_roboflow_prediction(
     if not 0.0 <= min_detection_confidence <= 1.0:
         raise ValueError("min_detection_confidence must be between 0 and 1.")
 
+    normalised_allowed_classes = None
+
+    if allowed_classes is not None:
+        normalised_allowed_classes = {
+            normalise_detection_class_name(class_name)
+            for class_name in allowed_classes
+        }
+
     candidates: list[dict[str, Any]] = []
+    rejected_reasons: list[str] = []
 
     for prediction in predictions:
         if not isinstance(prediction, dict):
+            rejected_reasons.append("prediction_not_dict")
             continue
 
         if not REQUIRED_ROBOFLOW_BOX_KEYS.issubset(prediction):
+            rejected_reasons.append(
+                f"missing_box_keys:{set(REQUIRED_ROBOFLOW_BOX_KEYS) - set(prediction)}"
+            )
             continue
 
-        if allowed_classes is not None:
-            class_name = str(prediction.get("class", ""))
-            if class_name not in allowed_classes:
+        if normalised_allowed_classes is not None:
+            class_name = normalise_detection_class_name(
+                prediction.get("class", "")
+            )
+
+            if class_name not in normalised_allowed_classes:
+                rejected_reasons.append(
+                    f"class_rejected:{class_name}"
+                )
                 continue
 
         confidence = prediction.get("confidence")
 
         if confidence is not None and float(confidence) < min_detection_confidence:
+            rejected_reasons.append(
+                f"confidence_too_low:{confidence}"
+            )
+            continue
+
+        width = float(prediction["width"])
+        height = float(prediction["height"])
+
+        if width <= 0 or height <= 0:
+            rejected_reasons.append(
+                f"invalid_box_size:{width}x{height}"
+            )
             continue
 
         candidates.append(prediction)
 
     if not candidates:
-        raise ValueError("No valid Roboflow plate detections found.")
+        raise ValueError(
+            "No valid Roboflow plate detections found. "
+            f"Rejected reasons: {rejected_reasons}"
+        )
 
     def sort_key(prediction: dict[str, Any]) -> tuple[float, float]:
         confidence = float(prediction.get("confidence", 0.0))

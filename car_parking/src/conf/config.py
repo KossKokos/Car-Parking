@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # DATABASE CHECKS
     REQUIRED_TABLES: List[str] = []
 
+    # ROBOFLOW  
+    ROBOFLOW_API_KEY: str = ""
+    ROBOFLOW_PLATE_DETECT_URL: str = "" 
+    ROBOFLOW_CONFIDENCE: int = 0
+    ROBOFLOW_OVERLAP: int = 0
+
     class Config:
         env_file = ENV_FILE
         env_file_encoding = "utf-8"

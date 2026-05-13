@@ -1,260 +1,275 @@
-import cv2
-import numpy as np
-import keras
-from typing import Tuple
-from .vehicle_detector import VehicleDetector
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+import cv2
+from pathlib import Path
+from typing import Any
+
+##############################################################################################################################
+from anpr.inference.pipeline import (
+    extract_roboflow_predictions,
+    select_best_roboflow_prediction,
+)
+from anpr.preprocessing.image_ops import (
+    crop_image_from_roboflow_prediction,
+    load_image_bgr,
+)
+from car_parking.src.services.roboflow_service import get_roboflow_plate_detector
+##############################################################################################################################
+
+from car_parking.src.services.anpr_service import ANPRService
+from car_parking.src.services.roboflow_service import get_roboflow_plate_detector
 
 
-path = str(Path(__file__).parent.parent) + "/models"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-# dictionary of all classes so when model predicts number we can look up the digit or letter
-CLASSES = {
-    0: 0,   1: 1,   2: 2,
-    3: 3,   4: 4,   5: 5,   
-    6: 6,   7: 7,   8: 8,
-    9: 9,   10: "A",    11: "B",
-    12: "C",    13: "D",    14: "E",
-    15: "F",    16: "G",    17: "H",
-    18: "I",    19: "J",    20: "K",
-    21: "L",    22: "M",    23: "N",    
-    24: "O",    25: "P",    26: "Q",
-    27: "R",    28: "S",    29: "T",
-    30: "U",    31: "V",    32: "W",
-    33: "X",    34: "Y",    35: "Z"
+DEBUG_ANPR_CROP_DIR = PROJECT_ROOT / "debug" / "anpr_crops"
+
+ALLOWED_PLATE_CLASSES = {
+    "number-plates",
+    "number_plate",
+    "number_plates",
+    "license_plate",
+    "license-plate",
+    "plate",
 }
 
 
-class PlatesReader():
-    
-    # loading text classifier model
-    model = keras.models.load_model(path + r"/text_classifier.keras")
-    vd = VehicleDetector()
+_anpr_service: ANPRService | None = None
 
-    # method to get boxes from image where text is located
-    async def get_rectangles(self, img_ori):
-        # copy of img
-        img_ori = img_ori
-        # converting to gray
-        gray = cv2.cvtColor(img_ori, cv2.COLOR_BGR2GRAY)
-        structuringElement = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
-        imgTopHat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, structuringElement)
-        imgBlackHat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, structuringElement)
+def get_anpr_service() -> ANPRService:
+    """
+    Lazily load the ANPR service once and reuse it.
 
-        imgGrayscalePlusTopHat = cv2.add(gray, imgTopHat)
-        gray = cv2.subtract(imgGrayscalePlusTopHat, imgBlackHat)
-        # blur image
-        img_blurred = cv2.GaussianBlur(gray, ksize=(5, 5), sigmaX=0)
-        # threshold image
-        img_thresh = cv2.adaptiveThreshold(
-            img_blurred,
-            maxValue=255.0,
-            adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            thresholdType=cv2.THRESH_BINARY_INV,
-            blockSize=11,
-            C=3
-        )
+    This prevents loading the PyTorch checkpoint on every request.
+    """
+    global _anpr_service
 
-        contours, _= cv2.findContours(
-        img_thresh,
-        mode=cv2.RETR_LIST,
-        method=cv2.CHAIN_APPROX_NONE
-        )
+    if _anpr_service is None:
+        _anpr_service = ANPRService(device="cpu")
 
-        contours_dict = []
+    return _anpr_service
 
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
 
-            # insert to dict
-            contours_dict.append({
-                'contour': contour,
-                'x': x,
-                'y': y,
-                'w': w,
-                'h': h,
-                'cx': x + (w / 2),
-                'cy': y + (h / 2)
-            })
+class PlatesReader:
+    """
+    Compatibility wrapper replacing the old TensorFlow PlatesReader.
 
-        MIN_AREA = 80 # min area of the box
-        MIN_WIDTH, MIN_HEIGHT = 2, 8
-        MIN_RATIO, MAX_RATIO = 0.25, 1.0
+    Existing route code can keep using:
+        plate = await pr.get_prediction(img)
 
-        possible_contours = []
+    Important:
+        img should be a cropped plate image or a good plate crop.
+        For full car images, use Roboflow detection flow.
+    """
 
-        cnt = 0
-        for d in contours_dict:
-            area = d['w'] * d['h']
-            ratio = d['w'] / d['h']
-            # checking the area and ratio of every contour
-            if area > MIN_AREA \
-            and d['w'] > MIN_WIDTH and d['h'] > MIN_HEIGHT \
-            and MIN_RATIO < ratio < MAX_RATIO:
-                d['idx'] = cnt
-                cnt += 1
-                possible_contours.append(d)
-            
-        MAX_DIAG_MULTIPLYER = 5
-        MAX_ANGLE_DIFF = 12.0 
-        MAX_AREA_DIFF = 0.5 
-        MAX_WIDTH_DIFF = 0.8
-        MAX_HEIGHT_DIFF = 0.2
-        MIN_N_MATCHED = 5 
-
-        def find_chars(contour_list):
-            matched_result_idx = []
-
-            for d1 in contour_list:
-                matched_contours_idx = []
-                for d2 in contour_list:
-                    if d1['idx'] == d2['idx']:
-                        continue
-
-                    dx = abs(d1['cx'] - d2['cx'])
-                    dy = abs(d1['cy'] - d2['cy'])
-
-                    diagonal_length1 = np.sqrt(d1['w'] ** 2 + d1['h'] ** 2)
-
-                    distance = np.linalg.norm(np.array([d1['cx'], d1['cy']]) - np.array([d2['cx'], d2['cy']]))
-                    if dx == 0:
-                        angle_diff = 90
-                    else:
-                        angle_diff = np.degrees(np.arctan(dy / dx))
-                    area_diff = abs(d1['w'] * d1['h'] - d2['w'] * d2['h']) / (d1['w'] * d1['h'])
-                    width_diff = abs(d1['w'] - d2['w']) / d1['w']
-                    height_diff = abs(d1['h'] - d2['h']) / d1['h']
-
-                    if distance < diagonal_length1 * MAX_DIAG_MULTIPLYER \
-                    and angle_diff < MAX_ANGLE_DIFF and area_diff < MAX_AREA_DIFF \
-                    and width_diff < MAX_WIDTH_DIFF and height_diff < MAX_HEIGHT_DIFF:
-                        matched_contours_idx.append(d2['idx'])
-
-                # append this contour
-                matched_contours_idx.append(d1['idx'])
-
-                if len(matched_contours_idx) < MIN_N_MATCHED:
-                    continue
-
-                matched_result_idx.append(matched_contours_idx)
-
-                unmatched_contour_idx = []
-                for d4 in contour_list:
-                    if d4['idx'] not in matched_contours_idx:
-                        unmatched_contour_idx.append(d4['idx'])
-
-                unmatched_contour = np.take(possible_contours, unmatched_contour_idx)
-
-                # recursive
-                recursive_contour_list = find_chars(unmatched_contour)
-
-                for idx in recursive_contour_list:
-                    matched_result_idx.append(idx)
-
-                break
-
-            return matched_result_idx
-
-        result_idx = find_chars(possible_contours)
-
-        matched_result = []
-        for idx_list in result_idx:
-            matched_result.append(np.take(possible_contours, idx_list))
-        return matched_result
-    
-    # method to crop image and leave only car
-    async def get_cropped_img(self, img_ori):
-        print("was called")
-        # model to find car in the image 
-        img = img_ori
-
+    async def get_prediction(self, img: np.ndarray) -> str | None:
+        """
+        Preserve old contract:
+            input: OpenCV image array
+            output: plate string or None
+        """
         try:
-            vehicle_boxes = self.vd.detect_vehicles(img)
+            result = get_anpr_service().predict_cropped_plate_array(img)
         except Exception:
             return None
-            
-        areas = []
-        for box in vehicle_boxes:
-            x, y, w, h = box
-            area = w * h
-            areas.append(area)
-        if len(areas) == 0:
+
+        if not result.should_accept:
             return None
+
+        return result.plate
+
+    async def get_prediction_report(self, img: np.ndarray) -> dict[str, Any] | None:
+        """
+        New richer interface for debugging/API response if needed.
+        """
+        try:
+            result = get_anpr_service().predict_cropped_plate_array(img)
+        except Exception as exc:
+            return {
+                "plate": None,
+                "should_accept": False,
+                "error": str(exc),
+            }
+
+        return result.to_dict()
+
+    async def get_prediction_from_cropped_image_path(
+        self,
+        image_path: str | Path,
+    ) -> dict[str, Any]:
+        result = get_anpr_service().predict_cropped_plate_path(image_path)
+        return result.to_dict()
+
+    async def get_prediction_from_roboflow_response(
+        self,
+        image_path: str | Path,
+        roboflow_response: dict[str, Any] | list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        result = get_anpr_service().predict_from_roboflow_response(
+            image_path=image_path,
+            roboflow_response=roboflow_response,
+            crop_padding=0.10,
+        )
+        return result.to_dict()
+    
+
+    async def get_prediction_from_car_image_path(
+        self,
+        image_path: str | Path,
+    ) -> str | None:
+        """
+        Full car image path -> Roboflow plate detection -> ANPR recognition.
+
+        Returns:
+            plate string or None
+        """
+        try:
+            report = await self.get_multi_padding_report_from_car_image_path(
+                image_path=image_path,
+                save_debug_crops=True,
+            )
+
+            best = report["best"]
+
+        except Exception as exc:
+            print(f"Plate detection/recognition failed: {exc}")
+            return None
+
+        if not best["should_accept"]:
+            print(f"Plate rejected: {best}")
+            return None
+
+        return best["plate"]
+
+    async def get_prediction_report_from_car_image_path(
+        self,
+        image_path: str | Path,
+    ) -> dict[str, Any]:
+        """
+        Full car image path -> Roboflow -> ANPR -> full debug result.
+        """
+        try:
+            return await self.get_multi_padding_report_from_car_image_path(
+                image_path=image_path,
+                save_debug_crops=True,
+            )
+
+        except Exception as exc:
+            return {
+                "plate": None,
+                "should_accept": False,
+                "error": str(exc),
+            }
         
-        biggest_box = max(areas)
-        idx = areas.index(biggest_box)
-        x, y, w, h = vehicle_boxes[idx]
-        img = img[y:y+h, x:x+w]
-        return img
+    async def get_multi_padding_report_from_car_image_path(
+        self,
+        image_path: str | Path,
+        paddings: tuple[float, ...] = (0.0, 0.03, 0.05, 0.10, 0.15),
+        save_debug_crops: bool = True,
+    ) -> dict[str, Any]:
+        """
+        Full car image -> Roboflow detection -> try multiple crop paddings
+        -> recognise each crop -> return best report.
 
-    # method to add padding to image
-    async def resize_with_pad(self, image: np.array, 
-                    new_shape: Tuple[int, int], 
-                    padding_color: Tuple[int] = (255, 255, 255)) -> np.array:
-        
-        original_shape = (image.shape[1], image.shape[0])
-        ratio = float(max(new_shape))/max(original_shape)
-        new_size = tuple([int(x*ratio) for x in original_shape])
+        This is for debugging and improving real-world robustness.
+        """
+        image_path = Path(image_path)
 
-        if new_size[0] > new_shape[0] or new_size[1] > new_shape[1]:
-            ratio = float(min(new_shape)) / min(original_shape)
-            new_size = tuple([int(x * ratio) for x in original_shape])
+        roboflow_response = await get_roboflow_plate_detector().detect_from_image_path(
+            image_path
+        )
 
-        image = cv2.resize(image, new_size)
-        delta_w = new_shape[0] - new_size[0] if new_shape[0] > new_size[0] else 0
-        delta_h = new_shape[1] - new_size[1] if new_shape[1] > new_size[1] else 0
-        top, bottom = delta_h//2, delta_h-(delta_h//2)
-        left, right = delta_w//2, delta_w-(delta_w//2)
-        image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=padding_color)
-        return image
+        predictions = extract_roboflow_predictions(roboflow_response)
 
-    # method to get prediction of text on the plate
-    async def get_prediction(self, img):
-        img_ori = img
-        matched_result = await self.get_rectangles(img_ori)
-        if len(matched_result) != 1:
-            img_ori = await self.get_cropped_img(img_ori)
-            if img_ori is None:
-                return None
-            matched_result = await self.get_rectangles(img_ori)
-            if len(matched_result) != 1:
-                return None
-        matched_result = matched_result[0]
-        
-        idx_x = {}
-        idx_x_sorted_dict = {}
-        res = []
+        selected_detection = select_best_roboflow_prediction(
+            predictions=predictions,
+            min_detection_confidence=0.50,
+            allowed_classes=ALLOWED_PLATE_CLASSES,
+        )
 
-        for idx, d in enumerate(matched_result):
-            idx_x[idx] = d['x']
-        idx_x_sort = sorted(idx_x.items(), key=lambda x: x[1]) 
+        full_image = load_image_bgr(image_path)
 
-        for idx_x in idx_x_sort:
-            idx_x_sorted_dict[idx_x[0]] = idx_x[1]
+        attempts: list[dict[str, Any]] = []
 
-        for key in idx_x_sorted_dict.keys():
-            res.append(matched_result[key])
+        if save_debug_crops:
+            DEBUG_ANPR_CROP_DIR.mkdir(parents=True, exist_ok=True)
 
-        result = []
-        new_shape = (24, 44)
-        color = (255, 255, 255)
-        for d in res:
-            symbol = img_ori[d['y']:d['y']+d['h'], d['x']:d['x']+d['w']]
-            img = cv2.cvtColor(symbol, cv2.COLOR_BGR2GRAY)
-            img = cv2.resize(img, (15, 25))
-            img = await self.resize_with_pad(img, new_shape, color)
-            result.append(img)
+        for padding in paddings:
+            crop = crop_image_from_roboflow_prediction(
+                image=full_image,
+                prediction=selected_detection,
+                padding=padding,
+            )
 
-        result = np.array(result)
-        result = np.reshape(result, (result.shape[0], result.shape[1], result.shape[2], 1))
-        result = result / 255.
+            recognition_result = get_anpr_service().predict_cropped_plate_array(crop)
 
-        predicted = self.model.predict(result)
-        predicted = [np.argmax(pred) for pred in predicted] 
-        result = [str(CLASSES[pred]) for pred in predicted]
-        result = ''.join(result)
-        return result
+            crop_path = None
+
+            if save_debug_crops:
+                crop_filename = (
+                    f"{image_path.stem}_pad_{str(padding).replace('.', '_')}.jpg"
+                )
+                crop_path = DEBUG_ANPR_CROP_DIR / crop_filename
+                cv2.imwrite(str(crop_path), crop)
+
+            attempt = recognition_result.to_dict()
+            attempt["padding"] = padding
+            attempt["crop_shape"] = tuple(int(value) for value in crop.shape)
+            attempt["debug_crop_path"] = str(crop_path) if crop_path else None
+
+            attempts.append(attempt)
+
+        accepted_attempts = [
+            attempt for attempt in attempts
+            if attempt["should_accept"] is True
+        ]
+
+        if accepted_attempts:
+            best_attempt = max(
+                accepted_attempts,
+                key=lambda item: item["overall_confidence"],
+            )
+        else:
+            best_attempt = max(
+                attempts,
+                key=lambda item: item["overall_confidence"],
+            )
+
+        return {
+            "best": best_attempt,
+            "attempts": attempts,
+            "selected_detection": selected_detection,
+            "roboflow_response": roboflow_response,
+        }
 
 
 pr = PlatesReader()
+
+
+def read_plate_from_cropped_image(image_path: str | Path) -> dict[str, Any]:
+    """
+    Simple sync helper for API/service code.
+    """
+    result = get_anpr_service().predict_cropped_plate_path(image_path)
+    return result.to_dict()
+
+
+def read_plate_from_roboflow_response(
+    image_path: str | Path,
+    roboflow_response: dict[str, Any] | list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Simple sync helper for full image + detector response.
+    """
+    result = get_anpr_service().predict_from_roboflow_response(
+        image_path=image_path,
+        roboflow_response=roboflow_response,
+        crop_padding=0.10,
+    )
+    return result.to_dict()

@@ -1,0 +1,24 @@
+Hagging face dataset with uk car images:
+
+from datasets import load_dataset
+
+# Login using e.g. `huggingface-cli login` to access this dataset
+ds = load_dataset("ud-smart-city/united-kingdom-license-plate-dataset") 
+
+Use it in thr loop and call roboflow to extract license plates if confidence is high enough;
+Then, crop and save plates in the separate folder
+After, I will use folder and images to train my CNN prediction model.
+using this, my cnn will learn from actual images, rather then synthetic images 
+This should work much better in the real-world examples. 
+
+
+New plan:
+
+1) Scrap website to extract real car pictures
+2) Use Roboflow with confidence of 80+ to detect license plate
+3) Save car image into folder
+4) Crop image to extract only plate
+5) Run pre-trained model to detect text 
+6) SAve cropepd plate img with name containing predicted plate number  
+7) Manually inspect predictions and change if needed
+8) Train CNN reader on a new plates data to mock real-world example.
