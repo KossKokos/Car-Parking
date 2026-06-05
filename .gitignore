@@ -38,4 +38,17 @@ uk-plate-recognition_structure.txt
 uk_plate_recognition/.pytest_cache/
 uk_plate_recognition/src/**/__pycache__/
 uk_plate_recognition/data/raw/
+uk_plate_recognition/data/metadata/
 uk_plate_recognition/outputs/
+uk_plate_recognition/checkpoints/baseline_cnn/
+uk_plate_recognition/checkpoints/custom_data_cnn/
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_data_cnn_v2_best.pt
+requirements.txt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_clean_36x124_best.pt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_clean_48x160_best.pt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_light_aug_36x124_best.pt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_light_aug_48x160_best.pt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/final_clean_36x124_10ep_best.pt
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/final_clean_36x124_10ep_last.pt
+uk_plate_recognition/checkpoints/synthetic_minority_36x124/
+.gitignore

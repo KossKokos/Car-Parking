@@ -12,10 +12,6 @@ from anpr.inference.preprocess import prepare_plate_tensor
 from anpr.inference.decode import PlatePrediction, decode_model_outputs
 from anpr.inference.result import PlateRecognitionResult, build_recognition_result
 from anpr.models.plate_cnn import PlateCNN
-from anpr.preprocessing.image_ops import (
-    crop_image_from_roboflow_prediction,
-    load_image_bgr,
-)
 
 
 class PlateRecognizer:
@@ -66,7 +62,6 @@ class PlateRecognizer:
             checkpoint_path,
             map_location=device,
         )
-
         model_config = checkpoint["model_config"]
 
         model = PlateCNN(
@@ -165,50 +160,6 @@ class PlateRecognizer:
         prediction = self.predict_array(image)
         return asdict(prediction)
 
-    def predict_from_roboflow_crop(
-        self,
-        image_path: str | Path,
-        prediction: dict,
-        padding: float = 0.05,
-    ) -> PlatePrediction:
-        """
-        Predict plate text from a full image and one Roboflow detection box.
-
-        Args:
-            image_path:
-                Path to full car/barrier image.
-            prediction:
-                Roboflow-style prediction dict with x, y, width, height.
-            padding:
-                Relative crop padding around the detected plate.
-
-        Returns:
-            PlatePrediction
-        """
-        image = load_image_bgr(image_path)
-
-        crop = crop_image_from_roboflow_prediction(
-            image=image,
-            prediction=prediction,
-            padding=padding,
-        )
-
-        return self.predict_array(crop)
-
-    def predict_from_roboflow_crop_as_dict(
-        self,
-        image_path: str | Path,
-        prediction: dict,
-        padding: float = 0.05,
-    ) -> dict[str, Any]:
-        plate_prediction = self.predict_from_roboflow_crop(
-            image_path=image_path,
-            prediction=prediction,
-            padding=padding,
-        )
-
-        return asdict(plate_prediction)
-
     def _normalise_input_image(
         self,
         image: np.ndarray,
@@ -239,7 +190,6 @@ class PlateRecognizer:
             return image
 
         raise ValueError(f"Unsupported image shape: {image.shape}")
-    
 
     def predict_image_report(
         self,
@@ -265,26 +215,6 @@ class PlateRecognizer:
 
         return build_recognition_result(
             prediction=prediction,
-            min_overall_confidence=min_overall_confidence,
-            min_position_confidence=min_position_confidence,
-        )
-
-    def predict_from_roboflow_crop_report(
-        self,
-        image_path: str | Path,
-        prediction: dict,
-        padding: float = 0.05,
-        min_overall_confidence: float = 0.80,
-        min_position_confidence: float = 0.60,
-    ) -> PlateRecognitionResult:
-        plate_prediction = self.predict_from_roboflow_crop(
-            image_path=image_path,
-            prediction=prediction,
-            padding=padding,
-        )
-
-        return build_recognition_result(
-            prediction=plate_prediction,
             min_overall_confidence=min_overall_confidence,
             min_position_confidence=min_position_confidence,
         )

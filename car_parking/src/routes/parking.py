@@ -1,7 +1,6 @@
-import io
+import tempfile
+from pathlib import Path
 
-import numpy as np
-from PIL import Image
 from sqlalchemy.orm import Session
 
 from fastapi import (
@@ -18,7 +17,10 @@ from fastapi import (
 
 from car_parking.src.services.exceptions.parking_exceptions import ParkingError
 
-from ..conf.constants import LICENSE_PLATE_NOT_FOUND_DETAIL, LICENSE_PLATE_NOT_FOUND_MESSAGE
+from ..conf.constants import (
+    LICENSE_PLATE_NOT_FOUND_DETAIL,
+    LICENSE_PLATE_NOT_FOUND_MESSAGE,
+)
 
 from ..database.db import get_db
 from ..schemas.parking import ParkingAvailabilityResponse, ParkingSchema
@@ -27,39 +29,15 @@ from ..repository import car as repository_car
 from ..repository import parking as repository_parking
 from ..repository import tariff as repository_tariff
 from ..repository import users as repository_users
-from ..utils.parking_helpers import _format_route_datetime, _raise_for_parking_error
+from ..utils.parking_helpers import (
+    _format_route_datetime,
+    _raise_for_parking_error,
+)
 
 from ..services import email as service_email
 from ..services.plate_reader import pr as PlateReader
 
 router = APIRouter(prefix="/parking", tags=["parking"])
-
-
-async def _read_uploaded_image_as_numpy(file: UploadFile) -> np.ndarray:
-    valid_ext = await repository_parking.is_valid_file_ext(file)
-
-    if not valid_ext:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file extension",
-        )
-
-    file_content = await file.read()
-
-    try:
-        image = Image.open(io.BytesIO(file_content))
-        return np.array(image, dtype="uint8")
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image file",
-        ) from exc
-
-
-async def _detect_license_plate_from_upload(file: UploadFile) -> str | None:
-    image = await _read_uploaded_image_as_numpy(file)
-    return await PlateReader.get_prediction(image)
 
 
 async def _get_banned_car_message_or_none(license_plate: str, db: Session) -> str | None:
@@ -140,7 +118,7 @@ async def _handle_enter_parking(
     file: UploadFile,
     db: Session,
 ):
-    license_plate = await _detect_license_plate_from_upload(file)
+    license_plate = await _detect_license_plate_from_car_upload(file)
 
     if license_plate is None:
         raise HTTPException(
@@ -160,7 +138,7 @@ async def _handle_enter_parking(
         parking_place = await repository_parking.entry_to_the_parking(license_plate, db)
     except ParkingError as error:
         _raise_for_parking_error(error)
-    
+
     await _schedule_parking_enter_email(
         background_tasks=background_tasks,
         request=request,
@@ -178,7 +156,7 @@ async def _handle_exit_parking(
     file: UploadFile,
     db: Session,
 ):
-    license_plate = await _detect_license_plate_from_upload(file)
+    license_plate = await _detect_license_plate_from_car_upload(file)
 
     if license_plate is None:
         return LICENSE_PLATE_NOT_FOUND_MESSAGE
@@ -217,28 +195,51 @@ async def _handle_exit_parking(
     )
 
     return parking_info
-############################################################################################################################
-############################################################################################################################
-############################################################################################################################
-@router.post(
-    "/parking/{license_plate}",
-    response_model=ParkingSchema,
-    status_code=status.HTTP_200_OK,
-    include_in_schema=False,
-)
-async def enter_parking_legacy(
-    license_plate: str,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    return await _handle_enter_parking(
-        background_tasks=background_tasks,
-        request=request,
-        file=file,
-        db=db,
-    )
+
+
+async def _save_uploaded_image_to_temp_file(file: UploadFile) -> Path:
+    valid_ext = await repository_parking.is_valid_file_ext(file)
+
+    if not valid_ext:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file extension",
+        )
+
+    file_content = await file.read()
+
+    if not file_content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty uploaded file",
+        )
+
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(file_content)
+            return Path(temp_file.name)
+
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not save uploaded image temporarily",
+        ) from exc
+
+
+async def _detect_license_plate_from_car_upload(file: UploadFile) -> str | None:
+    temp_image_path = await _save_uploaded_image_to_temp_file(file)
+
+    try:
+        return await PlateReader.get_prediction_from_car_image_path(temp_image_path)
+
+    finally:
+        try:
+            temp_image_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
 
 @router.post(
     "/enter",
@@ -252,27 +253,6 @@ async def enter_parking(
     db: Session = Depends(get_db),
 ):
     return await _handle_enter_parking(
-        background_tasks=background_tasks,
-        request=request,
-        file=file,
-        db=db,
-    )
-
-
-@router.post(
-    "/exit_parking/{license_plate}",
-    response_model=ParkingSchema,
-    status_code=status.HTTP_200_OK,
-    include_in_schema=False,
-)
-async def exit_parking_legacy(
-    license_plate: str,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    return await _handle_exit_parking(
         background_tasks=background_tasks,
         request=request,
         file=file,
@@ -343,3 +323,24 @@ async def get_parking_availability(
 )
 async def get_current_parking_availability(db: Session = Depends(get_db)):
     return await repository_parking.get_current_parking_availability(db)
+
+
+@router.post(
+    "/debug/anpr",
+    status_code=status.HTTP_200_OK,
+)
+async def debug_anpr_from_car_image(
+    file: UploadFile = File(...),
+):
+    temp_image_path = await _save_uploaded_image_to_temp_file(file)
+
+    try:
+        return await PlateReader.get_prediction_report_from_car_image_path(
+            temp_image_path
+        )
+
+    finally:
+        try:
+            temp_image_path.unlink(missing_ok=True)
+        except OSError:
+            pass
