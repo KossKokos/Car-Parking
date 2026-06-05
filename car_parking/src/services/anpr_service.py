@@ -1,90 +1,62 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
-from anpr.inference.pipeline import ANPRPipeline, ANPRPipelineResult
-from anpr.inference.result import PlateRecognitionResult
+from anpr.inference.open_image_models_pipeline import OpenImageModelsANPRPipeline
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DEFAULT_CHECKPOINT_PATH = (
-    PROJECT_ROOT
-    / "uk_plate_recognition"
+ANPR_ROOT = REPO_ROOT / "uk_plate_recognition"
+
+CHECKPOINT_PATH = (
+    ANPR_ROOT
     / "checkpoints"
-    / "baseline_cnn"
+    / "custom_data_cnn_v2"
     / "plate_cnn_final.pt"
 )
 
+DETECTION_MODEL = "yolo-v9-t-256-license-plate-end2end"
+MIN_OVERALL_CONFIDENCE = 0.95
+MIN_POSITION_CONFIDENCE = 0.80
 
-class ANPRService:
-    """
-    API-side wrapper around the PyTorch ANPR pipeline.
 
-    The model is loaded once when ANPRService is created and reused after that.
-    """
+@lru_cache(maxsize=1)
+def get_anpr_pipeline() -> OpenImageModelsANPRPipeline:
+    if not CHECKPOINT_PATH.exists():
+        raise FileNotFoundError(f"ANPR checkpoint not found: {CHECKPOINT_PATH}")
 
-    def __init__(
-        self,
-        checkpoint_path: str | Path = DEFAULT_CHECKPOINT_PATH,
-        device: str = "cpu",
-        min_overall_confidence: float = 0.80,
-        min_position_confidence: float = 0.60,
-        min_detection_confidence: float = 0.50,
-    ) -> None:
-        self.min_overall_confidence = min_overall_confidence
-        self.min_position_confidence = min_position_confidence
+    return OpenImageModelsANPRPipeline.from_checkpoint(
+        checkpoint_path=CHECKPOINT_PATH,
+        detection_model=DETECTION_MODEL,
+        detector_min_confidence=0.25,
+        crop_padding_ratio=0.05,
+        device="cpu",
+        min_overall_confidence=MIN_OVERALL_CONFIDENCE,
+        min_position_confidence=MIN_POSITION_CONFIDENCE,
+    )
 
-        self.pipeline = ANPRPipeline.from_checkpoint(
-            checkpoint_path=checkpoint_path,
-            device=device,
-            default_crop_padding=0.10,
-            min_overall_confidence=min_overall_confidence,
-            min_position_confidence=min_position_confidence,
-            min_detection_confidence=min_detection_confidence,
-            allowed_detection_classes={
-                "number-plates",
-                "number_plate",
-                "number_plates",
-                "license_plate",
-                "license-plate",
-                "plate",
-            },
-        )
 
-    def predict_cropped_plate_path(
-        self,
-        image_path: str | Path,
-    ) -> ANPRPipelineResult:
-        return self.pipeline.predict_cropped_image(image_path)
+def read_license_plate(image_path: str | Path) -> str:
+    result = get_anpr_pipeline().predict_from_image(image_path)
+    plate = result.get("plate")
 
-    def predict_cropped_plate_array(
-        self,
-        image: np.ndarray,
-    ) -> PlateRecognitionResult:
-        """
-        Predict from an already loaded cropped plate image array.
+    if not plate:
+        raise ValueError(f"ANPR failed to read plate from image: {image_path}")
 
-        This is useful for preserving the old plate_reader.py interface,
-        where get_prediction(img) received an OpenCV image array.
-        """
-        return self.pipeline.recognizer.predict_array_report(
-            image=image,
-            min_overall_confidence=self.min_overall_confidence,
-            min_position_confidence=self.min_position_confidence,
-        )
+    return plate
 
-    def predict_from_roboflow_response(
-        self,
-        image_path: str | Path,
-        roboflow_response: dict[str, Any] | list[dict[str, Any]],
-        crop_padding: float = 0.05,
-    ) -> ANPRPipelineResult:
-        return self.pipeline.predict_full_image_from_roboflow_response(
-            image_path=image_path,
-            roboflow_response=roboflow_response,
-            crop_padding=crop_padding,
-        )
+
+def read_license_plate_report(image_path: str | Path) -> dict[str, Any]:
+    result = get_anpr_pipeline().predict_from_image(image_path)
+
+    return {
+        "plate": result.get("plate"),
+        "confidence": result.get("confidence"),
+        "valid_format": result.get("valid_format"),
+        "should_accept": result.get("should_accept"),
+        "rejection_reasons": result.get("rejection_reasons"),
+        "detection": result.get("detection"),
+    }

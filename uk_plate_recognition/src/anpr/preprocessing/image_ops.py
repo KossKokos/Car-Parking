@@ -39,32 +39,6 @@ def load_image_bgr(image_path: str | Path) -> np.ndarray:
     return image
 
 
-def roboflow_xywh_to_xyxy(
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-) -> BoundingBoxXYXY:
-    """
-    Convert Roboflow-style centre x/y + width/height box to xyxy format.
-    """
-    if width <= 0:
-        raise ValueError(f"Box width must be positive, got {width}.")
-
-    if height <= 0:
-        raise ValueError(f"Box height must be positive, got {height}.")
-
-    half_width = width / 2
-    half_height = height / 2
-
-    return BoundingBoxXYXY(
-        x1=x - half_width,
-        y1=y - half_height,
-        x2=x + half_width,
-        y2=y + half_height,
-    )
-
-
 def add_padding_to_box(
     box: BoundingBoxXYXY,
     padding: float,
@@ -151,34 +125,3 @@ def crop_image_xyxy(
         raise ValueError("Crop is empty.")
 
     return crop.copy()
-
-
-def crop_image_from_roboflow_prediction(
-    image: np.ndarray,
-    prediction: dict,
-    padding: float = 0.05,
-) -> np.ndarray:
-    """
-    Crop image using one Roboflow-style prediction dictionary.
-
-    Expected prediction keys:
-        x, y, width, height
-    """
-    required_keys = {"x", "y", "width", "height"}
-    missing_keys = required_keys - set(prediction)
-
-    if missing_keys:
-        raise ValueError(f"Roboflow prediction missing keys: {missing_keys}")
-
-    box = roboflow_xywh_to_xyxy(
-        x=float(prediction["x"]),
-        y=float(prediction["y"]),
-        width=float(prediction["width"]),
-        height=float(prediction["height"]),
-    )
-
-    return crop_image_xyxy(
-        image=image,
-        box=box,
-        padding=padding,
-    )

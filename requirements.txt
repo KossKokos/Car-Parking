@@ -11,9 +11,6 @@
 # If you install everything directly from this file, pip will choose compatible wheels
 # from PyPI, but they may be larger depending on your OS/platform.
 
-# Roboflow public model
-aiohappyeyeballs==2.6.1
-
 # Core deep learning
 torch>=2.2,<3.0
 torchvision>=0.17,<1.0

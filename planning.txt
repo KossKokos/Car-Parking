@@ -1,24 +1,242 @@
-Hagging face dataset with uk car images:
+FIRST PLAN:
+  Hagging face dataset with uk car images:
 
-from datasets import load_dataset
+  `from datasets import load_dataset`
 
-# Login using e.g. `huggingface-cli login` to access this dataset
-ds = load_dataset("ud-smart-city/united-kingdom-license-plate-dataset") 
+  # Login using e.g. `huggingface-cli login` to access this dataset
+  ds = load_dataset("ud-smart-city/united-kingdom-license-plate-dataset") 
 
-Use it in thr loop and call roboflow to extract license plates if confidence is high enough;
-Then, crop and save plates in the separate folder
-After, I will use folder and images to train my CNN prediction model.
-using this, my cnn will learn from actual images, rather then synthetic images 
-This should work much better in the real-world examples. 
+  Use it in the loop and call roboflow to extract license plates if confidence is high enough;
+  Then, crop and save plates in the separate folder
+  After, I will use folder and images to train my CNN prediction model.
+  using this, my cnn will learn from actual images, rather then synthetic images 
+  This should work much better in the real-world examples. 
 
 
-New plan:
+NEW PLAN:
+  1) Scrap website to extract real car pictures
+  2) Use Roboflow with confidence of 80+ to detect license plate
+  3) Save car image into folder
+  4) Crop image to extract only plate
+  5) Run pre-trained model to detect text 
+  6) Save cropepd plate imgs with name containing predicted plate number  
+  7) Manually inspect predictions and change if needed
+  8) Train CNN reader on a new plates data to mock real-world example.
 
-1) Scrap website to extract real car pictures
-2) Use Roboflow with confidence of 80+ to detect license plate
-3) Save car image into folder
-4) Crop image to extract only plate
-5) Run pre-trained model to detect text 
-6) SAve cropepd plate img with name containing predicted plate number  
-7) Manually inspect predictions and change if needed
-8) Train CNN reader on a new plates data to mock real-world example.
+ADJUSTED NEW PLAN:
+  1) Scrap websites to extract real car pictures from different sources.
+  2) Use Roboflow API model with high confidence to detect license plate from images of car.
+  3) Save car images into folder.
+  4) Crop image to extract only plate from API model response boundary box. 
+  5) Run Plate Predictor API model to read license plate. 
+  6) Save cropepd plate imgs with name containing predicted plate number.  
+  7) Manually inspect predictions and change if needed.
+  8) Train CNN reader on a new plates data to mock real-world example.
+
+COMMANDS:
+  Poetry related commands:
+    - poetry install --with scraping  # use for scrapping 
+    - poetry install --with dev       # use to structure the code and functions
+    - poetry install --with training  # use to train the CNN model
+
+  Scrap Pinterest commands:
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=uk+car+pictures" --source-name "pinterest_uk_cars_v2" --project-root "." --max-images 10 --max-scroll-batches 5
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=uk+car+pictures" --source-name "pinterest_uk_cars_v3" --project-root "." --max-images 20 --max-scroll-batches 5
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=uk+car+pictures" --source-name "pinterest_uk_cars_main" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=uk+cars+rear+number+plate" --source-name "pinterest_uk_rear_plates" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=uk+car+number+plate" --source-name "pinterest_uk_number_plates" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=british+cars+number+plate" --source-name "pinterest_british_number_plates" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=british+police+cars" --source-name "pinterest_british_police_cars" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=british+modern+emergency+cars" --source-name "pinterest_british_emergency_cars" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=cars+front+view+in+london" --source-name "pinterest_front_view" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=cars+rear+view+in+london" --source-name "pinterest_rear_view" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=modern+taxi+london" --source-name "pinterest_taxi_cars" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=modern+bus+london" --source-name "pinterest_bus_london" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=Ford+Fiesta+UK+front+view" --source-name "pinterest_ford_fiesta" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=Vauxhall+Corsa+rear+UK+plate" --source-name "pinterest_vauxhall_corsa" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=Land+Rover+Discovery+UK+side+view" --source-name "pinterest_land_rover" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=MINI+Cooper+london+front" --source-name "pinterest_mini_cooper" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=BMW+London+driveway" --source-name "pinterest_bmw" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=Audi+London+Rear" --source-name "pinterest_audi" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+    - poetry run python -m anpr.scraping.scrape_images  --start-url "https://uk.pinterest.com/search/pins/?q=Mercedes+London+street" --source-name "pinterest_mercedes" --project-root "." --max-images 5000 --max-scroll-batches 300 --scroll-wait-ms 3000
+
+  Crop scraped images with Roboflow:
+    - poetry run python -m anpr.scraping.crop_scraped_with_roboflow --project-root "."  --source-name "phone_pictures" --min-detection-confidence 0.80 --roboflow-confidence-percent 80 --crop-padding 0.05 --sleep-seconds 0.3
+
+    - poetry run python -m anpr.scraping.crop_scraped_with_roboflow --project-root "." --limit 300 --min-detection-confidence 0.80 --roboflow-confidence-percent 80 --crop-padding 0.05 --sleep-seconds 0.3
+
+    - poetry run python -m anpr.scraping.crop_scraped_with_roboflow --project-root "." --min-detection-confidence 0.80 --roboflow-confidence-percent 80 --crop-padding 0.05 --sleep-seconds 0.3
+
+
+  CARGURUS SCRAPPING SCRIPT:
+    - poetry run python -m anpr.scraping.scrape_car_catalogue --start-url "https://www.cargurus.co.uk/Cars/spt-used-cars-London_L948721" --source-name "cargurus_catalogue" --project-root "." --max-images 20 --max-pages 3
+    - poetry run python -m anpr.scraping.scrape_car_catalogue --start-url "https://www.cargurus.co.uk/Cars/spt-used-cars-London_L948721" --source-name "cargurus_catalogue" --project-root "." --max-images 1000 --max-pages 100 --headless
+
+  BIGMOTORINGWORLD WEBSITE TO SCRAP:
+    - poetry run python -m anpr.scraping.scrape_rear_car_catalogue --start-url "https://www.bigmotoringworld.co.uk/used-cars/" --source-name "my_rear_car_website_test" --project-root "." --max-images 20 --max-pages 3
+    - poetry run python -m anpr.scraping.scrape_rear_car_catalogue --start-url "https://www.bigmotoringworld.co.uk/used-cars/" --source-name "my_rear_car_website_test" --project-root "." --max-images 10000 --max-pages 228 --headless
+
+  PHONE PICTURES REGISTERING SCRIPT RUN:
+    - poetry run python -m anpr.scraping.register_phone_images --project-root "." --image-dir "data/raw/phone_pictures" --source-name "phone_pictures"
+
+  Plate Predictor API model to create cropped plates dataset:
+    - poetry run python -m anpr.scraping.crop_scraped_with_plate_recognizer --project-root "." --source-name "phone_pictures" --regions "gb" --min-detection-confidence 0.70 --min-ocr-confidence 0.70 --crop-padding 0.05 --sleep-seconds 1.1
+    - poetry run python -m anpr.scraping.crop_scraped_with_plate_recognizer --project-root "." --source-name "cargurus_catalogue" --regions "gb" --min-detection-confidence 0.70 --min-ocr-confidence 0.70 --crop-padding 0.05 --sleep-seconds 1.1
+    - poetry run python -m anpr.scraping.crop_scraped_with_plate_recognizer --project-root "." --source-name "my_rear_car_website_test" --regions "gb" --min-detection-confidence 0.70 --min-ocr-confidence 0.70 --crop-padding 0.05 --sleep-seconds 1.1
+
+
+  REUSABLE SCRAPPING SCRIPT:
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue --start-url "https://www.arnoldclark.com/vehicles" --source-name "arnoldclark_test" --project-root "." --image-selector "img.ch-img--responsive[data-gslide='0']" --image-url-attrs "currentSrc,src,data-src" --allowed-image-domain "vcache.arnoldclark.com" --pagination-mode "click" --next-button-selector "button[aria-label='Goto next page']" --max-images 20 --max-pages 3
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue --start-url "https://www.arnoldclark.com/vehicles" --source-name "arnoldclark" --project-root "." --image-selector "img.ch-img--responsive[data-gslide='0']" --image-url-attrs "currentSrc,src,data-src" --allowed-image-domain "vcache.arnoldclark.com" --pagination-mode "click" --next-button-selector "button[aria-label='Goto next page']" --max-images 10000 --max-pages 500
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue --start-url 'https://www.arnoldclark.com/vehicles?min_price=300^&payment_type=monthly' --source-name "arnoldclark" --project-root "." --image-selector "img.ch-img--responsive[data-gslide='0']" --image-url-attrs "currentSrc,src,data-src" --allowed-image-domain "vcache.arnoldclark.com" --pagination-mode "click" --next-button-selector "button[aria-label='Goto next page']" --max-images 10000 --max-pages 500
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url-file "data/metadata/arnoldclark_start_url.txt" `
+      --source-name "arnoldclark_min300_monthly" `
+      --project-root "." `
+      --image-selector "img.ch-img--responsive[data-gslide='0']" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "vcache.arnoldclark.com" `
+      --pagination-mode "click" `
+      --next-button-selector "button[aria-label='Goto next page']" `
+      --max-images 10000 `
+      --max-pages 500
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url "https://www.autotrader.co.uk/car-search?postcode=SE17PB" `
+      --source-name "autotrader_scroll_test" `
+      --project-root "." `
+      --image-selector "img.main-image" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "m.atcdn.co.uk" `
+      --pagination-mode "scroll" `
+      --max-images 30 `
+      --max-pages 20 `
+      --page-wait-ms 1800 `
+      --scroll-step-px 2500
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url "https://www.autotrader.co.uk/car-search?postcode=SE17PB" `
+      --source-name "autotrader_scroll_main" `
+      --project-root "." `
+      --image-selector "img.main-image" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "m.atcdn.co.uk" `
+      --pagination-mode "scroll" `
+      --max-images 5000 `
+      --max-pages 500 `
+      --page-wait-ms 2000 `
+      --scroll-step-px 2500 `
+      --max-no-new-scroll-batches 5 `
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url-file "data/metadata/glyn_hopkin_start_url.txt" `
+      --source-name "glyn_hopkin_scroll_main" `
+      --project-root "." `
+      --image-selector "img.v-img__img" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "images.netdirector.auto" `
+      --pagination-mode "scroll" `
+      --max-images 5000 `
+      --max-pages 500 `
+      --page-wait-ms 5000 `
+      --scroll-step-px 1800 `
+      --max-no-new-scroll-batches 10 `
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url-file "data/metadata/cazoo_start_url.txt" `
+      --source-name "cazoo_click_main" `
+      --project-root "." `
+      --image-selector "img.object-contain" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "cdn.images.autoexposure.co.uk" `
+      --pagination-mode "click" `
+      --next-button-selector "a[aria-label='Go to next page']" `
+      --max-images 5000 `
+      --max-pages 500 `
+      --page-wait-ms 2000
+  
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url-file "data/metadata/cazoo_start_url.txt" `
+      --source-name "cazoo_click_main" `
+      --project-root "." `
+      --image-selector "img[fetchpriority='auto']" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "cdn.images.autoexposure.co.uk" `
+      --pagination-mode "click" `
+      --next-button-selector "a[aria-label='Go to next page']" `
+      --max-images 5000 `
+      --max-pages 500 `
+      --page-wait-ms 2000
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url "https://www.marshall.co.uk/used-cars/" `
+      --source-name "marshall_click_and_scroll_main" `
+      --project-root "." `
+      --image-selector "img.v-img__img" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --allowed-image-domain "images.netdirector.auto" `
+      --pagination-mode "scroll" `
+      --max-images 3000 `
+      --max-pages 500 `
+      --page-wait-ms 3000 `
+      --scroll-step-px 1000 `
+      --max-no-new-scroll-batches 10
+
+    - poetry run python -m anpr.scraping.scrape_generic_catalogue `
+      --start-url "https://www.evanshalshaw.com/search/" `
+      --source-name "evanshalshaw_click_and_scroll_main" `
+      --project-root "." `
+      --image-selector "img.search-results__image" `
+      --image-url-attrs "currentSrc,src,data-src" `
+      --pagination-mode "click" `
+      --next-button-selector "a[id='vehicle-search-load-more']" `
+      --max-images 3000 `
+      --max-pages 500 `
+      --page-wait-ms 3000 `
+      --scroll-step-px 2000 `
+      --max-no-new-scroll-batches 10
+
+  SORTING cropped plate images:
+    - poetry run python -m anpr.scraping.clean_plate_crops_by_filename `
+      --input-dir "data/raw/plate_crops_plate_recognizer" `
+      --output-dir "data/raw/plate_crops_LLNNLLL" `
+      --apply
+
+    - poetry run python -m anpr.scraping.clean_plate_crops_by_filename `
+      --input-dir "data/raw/plate_crops_plate_recognizer" `
+      --output-dir "data/raw/plate_crops_LLNNLLL_2" `
+      --apply
+
+  DUPLICATE REMOVAL:
+    - poetry run python -m anpr.scraping.remove_duplicate_plate_crops
+    - poetry run python -m anpr.scraping.remove_duplicate_plate_crops --apply
+    - poetry run python -m anpr.scraping.remove_duplicate_plate_crops --apply --delete
+
+  FILTER SMALL, UNREADEBLE PLATE CROPS:
+    - poetry run python -m anpr.scraping.filter_low_quality_plate_crops
+    - poetry run python -m anpr.scraping.filter_low_quality_plate_crops `
+      --min-width 45 `
+      --min-height 16 `
+      --min-blur-score 10 `
+      --min-aspect-ratio 2 `
+      --apply
+
+  YOLO9 MODEL FOR DETECTING & CROPPING & READING LICENSE PLATES:
+    - poetry run python -m anpr.scraping.crop_scraped_with_yolo_model --project-root "." --source-name "marshall_click_and_scroll_main" --regions "United Kingdom" --min-detection-confidence 0.8 --min-ocr-confidence 0.98 --crop-padding 0.05 --output-crop-dir "data/raw/plate_crops_plate_recognizer" --require-uk-format 
