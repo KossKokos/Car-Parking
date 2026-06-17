@@ -31,7 +31,7 @@ Thumbs.db
 car_parking/csv_files/*.csv
 !car_parking/csv_files/.gitkeep
 
-#uk_plate_recognition
+# UK plate recognition generated files
 uk_plate_recognition/chars_reader.ipynb
 uk_plate_recognition/cars_imgs
 uk-plate-recognition_structure.txt
@@ -43,7 +43,6 @@ uk_plate_recognition/outputs/
 uk_plate_recognition/checkpoints/baseline_cnn/
 uk_plate_recognition/checkpoints/custom_data_cnn/
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_data_cnn_v2_best.pt
-requirements.txt
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_clean_36x124_best.pt
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_clean_48x160_best.pt
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_light_aug_36x124_best.pt
@@ -51,4 +50,3 @@ uk_plate_recognition/checkpoints/custom_data_cnn_v2/custom_light_aug_48x160_best
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/final_clean_36x124_10ep_best.pt
 uk_plate_recognition/checkpoints/custom_data_cnn_v2/final_clean_36x124_10ep_last.pt
 uk_plate_recognition/checkpoints/synthetic_minority_36x124/
-.gitignore

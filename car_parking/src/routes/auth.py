@@ -23,7 +23,6 @@ from car_parking.src.services.auth import service_auth
 from car_parking.src.services import (
     email as service_email,
     roles as service_roles,
-    banned as service_banned,
     logout as service_logout,
 )
 from car_parking.src.schemas import (
@@ -44,6 +43,7 @@ async def _ensure_signup_data_is_unique(
     body: schema_users.UserModel,
     db: Session,
 ) -> None:
+    """Reject signup data that conflicts on email, username, or plate."""
     existing_user_with_email = await repository_users.get_user_by_email(
         body.email,
         db,
@@ -81,6 +81,7 @@ async def _ensure_signup_data_is_unique(
 
 
 async def _ensure_car_exists(license_plate: str, db: Session) -> None:
+    """Create the car row needed to link future parking events to a user."""
     normalized_license_plate = license_plate.upper()
 
     car = await repository_car.get_car_by_license_plate(
@@ -98,6 +99,7 @@ def _schedule_verification_email(
     request: Request,
     user: User,
 ) -> None:
+    """Queue the signup verification email after the response is returned."""
     background_tasks.add_task(
         service_email.send_email,
         user.email,
@@ -112,6 +114,7 @@ async def _authenticate_login_user(
     password: str,
     db: Session,
 ) -> User:
+    """Validate login credentials and account state before issuing tokens."""
     user = await repository_users.get_user_by_email(email, db)
 
     if user is None:
@@ -146,6 +149,7 @@ async def _create_token_response(
     user: User,
     db: Session,
 ) -> dict[str, str]:
+    """Create access and refresh tokens and persist the latest refresh token."""
     access_token = await service_auth.create_access_token(
         data={"sub": user.email},
     )
@@ -167,6 +171,7 @@ async def _validate_refresh_token_user(
     refresh_token: str,
     db: Session,
 ) -> User:
+    """Validate that a refresh token is current for its user account."""
     email = await service_auth.decode_refresh_token(refresh_token)
     user = await repository_users.get_user_by_email(email, db)
 
@@ -199,6 +204,7 @@ async def _get_user_from_email_token(
     token: str,
     db: Session,
 ) -> User:
+    """Resolve a user from an email action token."""
     email = await service_auth.decode_email_token(token)
     user = await repository_users.get_user_by_email(email, db)
 
@@ -217,6 +223,7 @@ def _schedule_confirmation_email(
     request: Request,
     user: User,
 ) -> None:
+    """Queue an account confirmation email without blocking the request."""
     background_tasks.add_task(
         service_email.send_email,
         user.email,
@@ -231,15 +238,15 @@ def _schedule_reset_password_email(
     request: Request,
     user: User,
 ) -> None:
+    """Queue a reset-password email without revealing whether the email exists."""
     background_tasks.add_task(
         service_email.send_reset_password_email,
         user.email,
         user.username,
         request.base_url,
     )
-############################################################################################################################################
-############################################################################################################################################
-############################################################################################################################################
+
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(
     body: schema_users.UserModel,
@@ -392,7 +399,6 @@ async def reset_password(
     )
 
     return {"detail": "User's password was changed successfully"}
-
 
 
 @router.get(

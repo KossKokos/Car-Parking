@@ -75,8 +75,8 @@ class OpenImageModelsANPRPipeline:
         """
         Predict plate text from a full car image.
 
-        The local detector returns a NumPy crop, but the existing recogniser
-        currently expects a file path. To avoid changing old recogniser files,
+        The local detector returns a NumPy crop, but the recogniser pipeline
+        currently expects a file path. To keep that API stable,
         this method saves the crop temporarily, runs recognition, then deletes
         the temporary crop.
 
@@ -136,6 +136,7 @@ class OpenImageModelsANPRPipeline:
 
     @staticmethod
     def _detection_to_dict(detection: PlateBox) -> dict[str, Any]:
+        """Convert a detector dataclass into a serializable dictionary."""
         return {
             "x1": detection.x1,
             "y1": detection.y1,

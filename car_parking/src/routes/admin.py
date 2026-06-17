@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from car_parking.src.database.db import get_db
@@ -35,6 +35,7 @@ ADMIN_DEPENDENCIES = [
 
 
 async def _get_user_or_404(user_id: int, db: Session) -> User:
+    """Load an admin target user or raise the route's 404 response."""
     user = await repository_users.get_user_by_id(user_id, db)
 
     if user is None:
@@ -51,6 +52,7 @@ def _ensure_can_change_user_ban_status(
     target_user: User,
     current_user: User,
 ) -> None:
+    """Prevent admins from banning themselves or changing the superadmin."""
     if current_user.id == target_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -69,6 +71,7 @@ def _ensure_can_delete_user(
     target_user: User,
     current_user: User,
 ) -> None:
+    """Enforce delete rules for self, superadmin, and admin targets."""
     if current_user.id == target_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -86,13 +89,14 @@ def _ensure_can_delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied. Only superadmin can delete another admin.",
         )
-    
+
 
 def _ensure_can_change_user_role(
     *,
     target_user: User,
     current_user: User,
 ) -> None:
+    """Enforce role-change rules for protected and admin accounts."""
     if current_user.id == target_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -113,7 +117,7 @@ def _ensure_can_change_user_role(
                 "superadmin."
             ),
         )
-    
+
 
 def _build_car_ban_response(
     *,
@@ -121,6 +125,7 @@ def _build_car_ban_response(
     user: User | None,
     action: str,
 ) -> dict:
+    """Build a consistent car-ban response for registered and unregistered cars."""
     user_id_key = f"{action} user id"
     user_email_key = f"{action} user email"
 
@@ -145,6 +150,7 @@ def _build_car_ban_response(
 
 
 def _raise_for_user_domain_error(error: UserDomainError) -> None:
+    """Translate user domain errors into HTTP exceptions for admin routes."""
     if isinstance(error, CarNotRegisteredError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -161,9 +167,8 @@ def _raise_for_user_domain_error(error: UserDomainError) -> None:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=str(error),
     )
-###########################################################################################################################################################
-###########################################################################################################################################################
-###########################################################################################################################################################
+
+
 @router.get(
     "/",
     status_code=status.HTTP_200_OK,
@@ -385,6 +390,19 @@ async def search_user_by_license_plate(
     "/create_csv/{license_plate}/{filename}",
     status_code=status.HTTP_200_OK,
     dependencies=ADMIN_DEPENDENCIES,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Parking history CSV file download.",
+            "content": {
+                "text/csv": {
+                    "schema": {
+                        "type": "string",
+                        "format": "binary",
+                    },
+                },
+            },
+        },
+    },
 )
 async def create_csv_file(
     license_plate: str,
@@ -392,13 +410,21 @@ async def create_csv_file(
     db: Session = Depends(get_db),
 ):
     try:
-        message = await repository_admin.create_parking_csv(
+        csv_content, download_filename = await repository_admin.create_parking_csv(
             license_plate,
             filename,
             db,
         )
-        return {"message": message}
-    
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{download_filename}"'
+                ),
+            },
+        )
+
     except UserDomainError as error:
         _raise_for_user_domain_error(error)
 

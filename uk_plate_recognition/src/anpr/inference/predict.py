@@ -51,6 +51,7 @@ class PlateRecognizer:
         checkpoint_path: str | Path,
         device: str | torch.device | None = None,
     ) -> "PlateRecognizer":
+        """Rebuild a recognizer from a training checkpoint and model config."""
         checkpoint_path = Path(checkpoint_path)
 
         if device is None:
@@ -84,6 +85,7 @@ class PlateRecognizer:
         self,
         image_path: str | Path,
     ) -> PlatePrediction:
+        """Load a cropped plate image from disk and decode its text."""
 
         image = self._load_image(image_path)
         return self.predict_array(image)
@@ -93,6 +95,7 @@ class PlateRecognizer:
         self,
         image_path: str | Path,
     ) -> dict[str, Any]:
+        """Return image prediction output as a plain dictionary."""
         prediction = self.predict_image(image_path)
         return asdict(prediction)
 
@@ -100,6 +103,7 @@ class PlateRecognizer:
         self,
         image_path: str | Path,
     ) -> np.ndarray:
+        """Load an image path in the recognizer's configured color mode."""
         image_path = Path(image_path)
 
         if not image_path.exists():
@@ -126,6 +130,7 @@ class PlateRecognizer:
         self,
         image: np.ndarray,
     ) -> torch.Tensor:
+        """Resize, normalize, and move the image tensor to the model device."""
         return prepare_plate_tensor(
             image=image,
             image_height=self.image_height,
@@ -157,6 +162,7 @@ class PlateRecognizer:
         self,
         image: np.ndarray,
     ) -> dict[str, Any]:
+        """Return array prediction output as a plain dictionary."""
         prediction = self.predict_array(image)
         return asdict(prediction)
 
@@ -197,6 +203,7 @@ class PlateRecognizer:
         min_overall_confidence: float = 0.80,
         min_position_confidence: float = 0.60,
     ) -> PlateRecognitionResult:
+        """Return prediction text plus validation and confidence decisions."""
         prediction = self.predict_image(image_path)
 
         return build_recognition_result(
@@ -211,6 +218,7 @@ class PlateRecognizer:
         min_overall_confidence: float = 0.80,
         min_position_confidence: float = 0.60,
     ) -> PlateRecognitionResult:
+        """Return report output for an already-loaded cropped plate image."""
         prediction = self.predict_array(image)
 
         return build_recognition_result(

@@ -10,6 +10,7 @@ class CarResponse(BaseModel):
 
     @staticmethod
     def from_db_model(db_model: Car):
+        """Build a response schema from a SQLAlchemy car model instance."""
         return CarResponse(
             id=db_model.id,
             license_plate=db_model.license_plate,

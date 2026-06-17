@@ -10,6 +10,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 def blur_score(image_path: Path) -> float:
+    """Estimate sharpness using the variance of the Laplacian."""
     image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
 
     if image is None:
@@ -29,6 +30,7 @@ def image_size(image_path: Path) -> tuple[int | None, int | None]:
 
 
 def safe_move(source: Path, destination_dir: Path) -> Path:
+    """Move a file without overwriting an existing destination filename."""
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     destination = destination_dir / source.name

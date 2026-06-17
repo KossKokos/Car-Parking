@@ -15,6 +15,9 @@ RUN apt-get update \
 RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 
 COPY pyproject.toml poetry.lock ./
+COPY uk_plate_recognition/pyproject.toml ./uk_plate_recognition/pyproject.toml
+COPY uk_plate_recognition/src ./uk_plate_recognition/src
+COPY uk_plate_recognition/checkpoints/custom_data_cnn_v2/plate_cnn_final.pt ./uk_plate_recognition/checkpoints/custom_data_cnn_v2/plate_cnn_final.pt
 
 RUN poetry install --without dev --no-root
 

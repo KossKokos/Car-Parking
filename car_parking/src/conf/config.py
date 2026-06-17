@@ -1,14 +1,16 @@
-import json
-
 from pathlib import Path
-from typing import List
 
 from pydantic import BaseSettings, EmailStr
 
 ENV_FILE = Path(__file__).parent.parent.parent.parent / ".env"
 
+
 class Settings(BaseSettings):
-    
+    APP_HOST: str = "0.0.0.0"
+    APP_PORT: int = 80
+    APP_DEBUG: bool = False
+    APP_RELOAD: bool = False
+
     # API SECRETS
     SECRET_KEY: str = "SECRET_KEY"
     ALGORITHM: str = "ALGORITHM"
@@ -16,14 +18,7 @@ class Settings(BaseSettings):
     # POSTGRESQL URL
     SQLALCHEMY_DATABASE_URL: str = "SQLALCHEMY_DATABASE_URL"
 
-    # REDIS CONNECTION
-    REDIS_DB: int = 0
-    REDIS_USER: str = "REDIS_USER"
-    REDIS_PASSWORD: str = "REDIS_PASSWORD"
-    REDIS_HOST: str = "REDIS_HOST"
-    REDIS_PORT: int = 6380
-
-    # REDIS URL
+    # Reserved for future Redis-backed app logic and /health/redis.
     REDIS_URL: str = "redis://localhost:6380/0"
 
     # EMAIL CONNECTION
@@ -33,23 +28,12 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "MAIL_SERVER"
 
-    # CLOUDINARY CONNECTION
-    CLOUDINARY_NAME: str = "CLOUDINARY_NAME"
-    CLOUDINARY_API_KEY: str = "CLOUDINARY_API_KEY"
-    CLOUDINARY_API_SECRET: str = "CLOUDINARY_API_SECRET"
-
     # DATABASE CHECKS
-    REQUIRED_TABLES: List[str] = []
+    REQUIRED_TABLES: list[str] = []
 
     class Config:
         env_file = ENV_FILE
         env_file_encoding = "utf-8"
 
-    # classmethod to parse varibles like REQUIRED_TABLES from json to python format
-    @classmethod
-    def parse_json_list(cls, value):
-        if isinstance(value, str):
-            return json.loads(value)
-        return value
 
 settings = Settings()

@@ -1,4 +1,5 @@
 import csv
+from io import StringIO
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 from car_parking.src.database.models import Tariff, User
 from car_parking.src.repository import users as repository_users
 from car_parking.src.schemas.users import UserRoleUpdate
-from car_parking.src.services.csv_generator import build_csv_file_path
+from car_parking.src.services.csv_generator import build_csv_download_filename
 
 
 async def get_tariff_by_name(
@@ -63,48 +64,73 @@ async def create_parking_csv(
     license_plate: str,
     filename: str,
     db: Session,
-) -> str:
+) -> tuple[str, str]:
+    """Build a downloadable CSV table for one car's completed parking history."""
     normalized_license_plate = license_plate.upper()
-    file_path = build_csv_file_path(filename)
+    download_filename = build_csv_download_filename(filename)
 
     parking_history = await repository_users.get_parking_info(
         normalized_license_plate,
         db,
     )
 
-    with file_path.open("w", newline="", encoding="utf-8") as csvfile:
-        fieldnames = [
-            "Name",
-            "Total Payment Amount",
-            "Total Parking Time",
-            "enter_time",
-            "departure_time",
-            "license_plate",
-            "amount_paid",
-            "duration",
-            "status",
-        ]
+    fieldnames = [
+        "Name",
+        "Total Payment Amount (GBP)",
+        "Total Parking Time (hours)",
+        "Entry Time",
+        "Departure Time",
+        "License Plate",
+        "Amount Paid (GBP)",
+        "Duration (hours)",
+        "Status",
+    ]
 
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
+    csvfile = StringIO(newline="")
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
 
-        for parking_info in parking_history.parking_info:
-            writer.writerow(
-                {
-                    "enter_time": parking_info.enter_time,
-                    "departure_time": parking_info.departure_time,
-                    "license_plate": parking_info.license_plate,
-                    "amount_paid": parking_info.amount_paid,
-                    "duration": parking_info.duration,
-                    "status": parking_info.status,
-                }
-            )
+    summary_values = {
+        "Name": parking_history.user,
+        "Total Payment Amount (GBP)": (
+            f"{parking_history.total_payment_amount:.2f}"
+        ),
+        "Total Parking Time (hours)": (
+            f"{parking_history.total_parking_time:.2f}"
+        ),
+    }
 
-        writer.writerow({"Name": parking_history.user})
-        writer.writerow({"Total Payment Amount": parking_history.total_payment_amount})
-        writer.writerow({"Total Parking Time": parking_history.total_parking_time})
+    if not parking_history.parking_info:
+        writer.writerow(
+            {
+                **summary_values,
+                "License Plate": normalized_license_plate,
+                "Status": "No completed parking sessions found",
+            }
+        )
 
-    return f"CSV file created: {file_path.name}"
+    for parking_info in parking_history.parking_info:
+        writer.writerow(
+            {
+                **summary_values,
+                "Entry Time": parking_info.enter_time,
+                "Departure Time": parking_info.departure_time,
+                "License Plate": parking_info.license_plate,
+                "Amount Paid (GBP)": (
+                    f"{parking_info.amount_paid:.2f}"
+                    if parking_info.amount_paid is not None
+                    else ""
+                ),
+                "Duration (hours)": (
+                    f"{parking_info.duration:.2f}"
+                    if parking_info.duration is not None
+                    else ""
+                ),
+                "Status": "Closed" if parking_info.status else "Open",
+            }
+        )
+
+    return csvfile.getvalue(), download_filename
 
 
 async def change_tariff(

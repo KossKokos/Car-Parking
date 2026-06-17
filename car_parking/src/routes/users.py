@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -11,19 +11,22 @@ from car_parking.src.schemas.parking import ParkingInfo
 from car_parking.src.services import (
     roles as service_roles,
     logout as service_logout,
-    banned as service_banned
+    banned as service_banned,
 )
 from car_parking.src.services.exceptions import user_exceptions as user_exception
 
 router = APIRouter(prefix="/users", tags=["users"])
 security = HTTPBearer()
 
-allowd_operation = service_roles.RoleRights(["user", "admin"])
-allowd_operation_by_admin = service_roles.RoleRights(["admin"])
+allowed_user_or_admin = service_roles.RoleRights(["user", "admin"])
 
 
 def _raise_for_user_domain_error(error: user_exception.UserDomainError) -> None:
-    if isinstance(error, (user_exception.CarNotRegisteredError, user_exception.UserNotFoundError)):
+    """Translate user domain errors into HTTP exceptions for user routes."""
+    if isinstance(
+        error,
+        (user_exception.CarNotRegisteredError, user_exception.UserNotFoundError),
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
@@ -47,7 +50,7 @@ def _raise_for_user_domain_error(error: user_exception.UserDomainError) -> None:
     status_code=status.HTTP_200_OK,
     dependencies=[
         Depends(service_logout.logout_dependency),
-        Depends(allowd_operation),
+        Depends(allowed_user_or_admin),
         Depends(service_banned.banned_dependency),
     ],
 )
@@ -67,10 +70,9 @@ async def read_users_me(
     status_code=status.HTTP_200_OK,
     dependencies=[
         Depends(service_logout.logout_dependency),
-        Depends(allowd_operation),
+        Depends(allowed_user_or_admin),
         Depends(service_banned.banned_dependency),
     ],
-    description="Any User",
 )
 async def get_user_profile(
     current_user: User = Depends(service_auth.get_current_user),

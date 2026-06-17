@@ -1,17 +1,26 @@
 from datetime import datetime
 import pytz
 
-from sqlalchemy.orm import Session
 from fastapi import File, HTTPException, status
+from sqlalchemy.orm import Session
 
-from car_parking.src.schemas.parking import CurrentParkingAvailabilityData, ParkingAvailabilityData, ParkingOperationResult
+from car_parking.src.conf.constants import (
+    EXTENSIONS,
+    PARKING_AVAILABILITY_DATETIME_FORMAT,
+    PARKING_COUNT_DATA,
+    TIMEZONE,
+)
+from car_parking.src.schemas.parking import (
+    CurrentParkingAvailabilityData,
+    ParkingAvailabilityData,
+    ParkingOperationResult,
+)
 from car_parking.src.utils import parking_helpers as helpers
-from ..database.models import Parking, Car, ParkingCount
+
+from ..database.models import Car, Parking, ParkingCount
 
 from ..repository import users as repository_users
 from ..repository.car import create_car
-
-from ..conf.constants import EXTENSIONS, PARKING_AVAILABILITY_DATETIME_FORMAT, PARKING_COUNT_DATA, TIMEZONE
 
 from ..services.exceptions.parking_exceptions import (
     CarNotInParkingError,
@@ -27,7 +36,7 @@ async def get_parking_place_by_car_license_plate(
 ) -> Parking | None:
     return helpers._get_active_parking_place_by_license_plate(
         license_plate=license_plate,
-        db=db
+        db=db,
     )
 
 
@@ -42,9 +51,10 @@ async def create_parking_place(license_plate: str, db: Session) -> Parking:
 
 
 async def change_parking_status_not_authorised(
-        parking_place_id: int, 
-        db: Session
-        ) -> ParkingOperationResult:
+    parking_place_id: int,
+    db: Session,
+) -> ParkingOperationResult:
+    """Close an unpaid parking session and calculate its invoice immediately."""
     parking_place = helpers._get_parking_place_by_id(parking_place_id, db)
 
     if parking_place is None:
@@ -60,7 +70,7 @@ async def change_parking_status_not_authorised(
 
     parking_place.status = True
     parking_count = helpers._get_parking_count(db)
-    
+
     parking = helpers._build_parking_schema(
         parking_place,
         message="The barrier is open, See you next time!",
@@ -75,6 +85,7 @@ async def confirm_authorised_payment(
     parking_place_id: int,
     db: Session,
 ) -> ParkingOperationResult:
+    """Mark an invoiced parking session as paid and free one parking space."""
     parking_place = helpers._get_parking_place_by_id(parking_place_id, db)
 
     if parking_place is None:
@@ -101,6 +112,7 @@ async def calculate_invoice(
     parking_place_id: int,
     db: Session,
 ) -> Parking:
+    """Calculate and persist departure time, duration, and amount for a session."""
     parking_place = helpers._get_parking_place_by_id(parking_place_id, db)
 
     if parking_place is None:
@@ -122,6 +134,7 @@ async def entry_to_the_parking(
     license_plate: str,
     db: Session,
 ) -> ParkingOperationResult:
+    """Create an active parking session unless the car is already parked."""
     car = db.query(Car).filter(Car.license_plate == license_plate).first()
 
     parking_count = helpers._get_parking_count(db)
@@ -168,12 +181,10 @@ async def exit_from_the_parking(
     license_plate: str,
     db: Session,
 ) -> ParkingOperationResult:
-
+    """Prepare an invoice for the active parking session of a leaving car."""
     user = await repository_users.get_user_by_car_license_plate(license_plate, db)
-    
-    # if user:
     parking_place = helpers._get_active_parking_place_by_license_plate(license_plate, db)
-    
+
     if parking_place:
         parking_place = await calculate_invoice(parking_place.id, db)
 
@@ -186,7 +197,6 @@ async def exit_from_the_parking(
         parking = helpers._build_parking_schema(
             parking_place,
             message=message,
-            format_departure_time=True,
         )
 
         return parking
@@ -194,8 +204,8 @@ async def exit_from_the_parking(
 
 
 async def seed_parking_count(db: Session) -> None:
+    """Insert the initial parking capacity row when the table is empty."""
     if db.query(ParkingCount).count() == 0:
-        
         for data in PARKING_COUNT_DATA:
             parking_count = ParkingCount(**data)
             db.add(parking_count)
@@ -214,6 +224,7 @@ APP_TIMEZONE = pytz.timezone(TIMEZONE)
 
 
 def _parse_parking_availability_datetime(value: str) -> datetime:
+    """Parse an availability query timestamp in the configured app timezone."""
     try:
         parsed_datetime = datetime.strptime(
             value,
@@ -236,6 +247,7 @@ async def get_parking_availability_at(
     requested_at: datetime,
     db: Session,
 ) -> ParkingAvailabilityData:
+    """Calculate free and occupied places at a requested historical timestamp."""
     parking_count = helpers._get_parking_count(db)
 
     occupied_places: int = helpers._count_occupied_places_at(requested_at, db)
@@ -256,6 +268,7 @@ async def get_parking_availability_at(
 async def get_current_parking_availability(
     db: Session,
 ) -> CurrentParkingAvailabilityData:
+    """Calculate current availability from active parking rows."""
     parking_count = helpers._get_parking_count(db)
 
     occupied_places = (

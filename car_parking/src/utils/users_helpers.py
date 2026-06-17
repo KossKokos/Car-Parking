@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
+import pytz
 from sqlalchemy.orm import Session
 
-from car_parking.src.conf.constants import RESPONSE_DATETIME_FORMAT
+from car_parking.src.conf.constants import RESPONSE_DATETIME_FORMAT, TIMEZONE
 from car_parking.src.database.models import Car, Parking
 
 
@@ -20,6 +21,7 @@ def _get_closed_parking_sessions_by_license_plate(
     license_plate: str,
     db: Session,
 ) -> list[Parking]:
+    """Return completed parking sessions for one normalized license plate."""
     return (
         db.query(Parking)
         .filter(
@@ -34,6 +36,7 @@ def _get_current_parking_session_by_license_plate(
     license_plate: str,
     db: Session,
 ) -> Parking | None:
+    """Return the active parking session for a license plate, if one exists."""
     return (
         db.query(Parking)
         .filter(
@@ -44,7 +47,17 @@ def _get_current_parking_session_by_license_plate(
     )
 
 
-def _format_datetime_for_response(value: datetime) -> str:
+APP_TIMEZONE = pytz.timezone(TIMEZONE)
+
+
+def _format_datetime_for_response(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        value = value.replace(tzinfo=timezone.utc)
+
+    value = value.astimezone(APP_TIMEZONE)
     return value.strftime(RESPONSE_DATETIME_FORMAT)
 
 

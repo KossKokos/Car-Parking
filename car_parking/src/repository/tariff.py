@@ -9,6 +9,7 @@ async def get_tariff_by_tariff_id(tariff_id: int, db: Session) -> Tariff | None:
 
 
 async def seed_tariff_table(db: Session):
+    """Insert default tariff rows when the tariff table is empty."""
     if db.query(Tariff).count() == 0:
         
         for data in TARIFFS_DATA:

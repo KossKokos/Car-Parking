@@ -9,6 +9,7 @@ class BannedDependency:
         self,
         current_user: User = Depends(service_auth.get_current_user),
     ) -> None:
+        """Reject requests from authenticated users whose account is banned."""
         if current_user.banned is True:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

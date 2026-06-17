@@ -1,29 +1,45 @@
-from fastapi import HTTPException, status
-import pytz
-
 from datetime import datetime, timezone
 
+import pytz
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from car_parking.src.conf.constants import DEFAULT_TARIFF_ID, PARKING_ALREADY_CLOSED_DETAIL, PARKING_FULL_DETAIL, RESPONSE_DATETIME_FORMAT
-
+from car_parking.src.conf.constants import (
+    DEFAULT_TARIFF_ID,
+    RESPONSE_DATETIME_FORMAT,
+    TIMEZONE,
+)
 from car_parking.src.database.models import Parking, ParkingCount, Tariff, User
 from car_parking.src.schemas.parking import ParkingResponse, ParkingSchema
-
-from car_parking.src.services.parking_calculations import calculate_parking_duration_hours, calculate_parking_cost
 from car_parking.src.services.exceptions.parking_exceptions import (
-    CarNotInParkingError, 
-    ParkingAlreadyClosedError, 
-    ParkingError, 
-    ParkingFullError, 
-    ParkingPlaceNotFoundError
+    CarNotInParkingError,
+    ParkingAlreadyClosedError,
+    ParkingError,
+    ParkingFullError,
+    ParkingPlaceNotFoundError,
 )
+from car_parking.src.services.parking_calculations import (
+    calculate_parking_cost,
+    calculate_parking_duration_hours,
+)
+
+
+APP_TIMEZONE = pytz.timezone(TIMEZONE)
+
+
+def _convert_datetime_to_app_timezone(value: datetime) -> datetime:
+    """Convert stored UTC datetimes to the configured application timezone."""
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        value = value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone(APP_TIMEZONE)
 
 
 def _format_datetime_for_response(value: datetime | None) -> str | None:
     if value is None:
         return None
 
+    value = _convert_datetime_to_app_timezone(value)
     return value.strftime(RESPONSE_DATETIME_FORMAT)
 
 
@@ -32,18 +48,15 @@ def _build_parking_schema(
     message: str,
     *,
     response_status: bool = False,
-    format_departure_time: bool = False,
 ) -> ParkingSchema:
-    departure_time = parking_place.departure_time
-
-    if format_departure_time:
-        departure_time = _format_datetime_for_response(departure_time)
-
+    """Convert a parking model plus display message into the route schema."""
     return ParkingSchema(
         info=ParkingResponse(
             id=parking_place.id,
             enter_time=_format_datetime_for_response(parking_place.enter_time),
-            departure_time=departure_time,
+            departure_time=_format_datetime_for_response(
+                parking_place.departure_time
+            ),
             license_plate=parking_place.license_plate,
             amount_paid=parking_place.amount_paid,
             duration=parking_place.duration,
@@ -54,6 +67,7 @@ def _build_parking_schema(
 
 
 def _get_tariff_for_user(user: User | None, db: Session) -> Tariff:
+    """Return a user's tariff, falling back to the configured default tariff."""
     tariff_id = user.tariff_id if user else DEFAULT_TARIFF_ID
 
     tariff = db.query(Tariff).filter_by(id=tariff_id).first()
@@ -72,7 +86,8 @@ def _apply_invoice_to_parking_place(
     user: User | None,
     db: Session,
 ) -> Parking:
-    departure_time = datetime.now(pytz.timezone("Europe/Kiev"))
+    """Mutate a parking session with departure time, duration, and invoice cost."""
+    departure_time = datetime.now(timezone.utc)
     duration = calculate_parking_duration_hours(
         parking_place.enter_time,
         departure_time,
@@ -89,7 +104,9 @@ def _apply_invoice_to_parking_place(
 
     return parking_place
 
+
 def _get_parking_count(db: Session) -> ParkingCount:
+    """Return the singleton parking capacity row or fail loudly if missing."""
     parking_count = db.query(ParkingCount).first()
 
     if parking_count is None:
@@ -103,6 +120,7 @@ def _is_parking_full(parking_count: ParkingCount) -> bool:
 
 
 def _increase_occupied_count(parking_count: ParkingCount) -> None:
+    """Increment occupied places while enforcing total capacity."""
     if _is_parking_full(parking_count):
         raise ValueError("Parking is full")
 
@@ -110,6 +128,7 @@ def _increase_occupied_count(parking_count: ParkingCount) -> None:
 
 
 def _decrease_occupied_count(parking_count: ParkingCount) -> None:
+    """Decrement occupied places without allowing the counter below zero."""
     if parking_count.occupied_quantity <= 0:
         parking_count.occupied_quantity = 0
         return
@@ -146,23 +165,26 @@ def _get_user_by_license_plate(
 
 
 def _format_route_datetime(value) -> str:
-    if hasattr(value, "strftime"):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
+    """Format mixed route datetime values before passing them to templates."""
+    if isinstance(value, datetime):
+        return _format_datetime_for_response(value) or ""
 
     return str(value)
 
 
 def _normalize_datetime_to_utc(value: datetime) -> datetime:
+    """Make naive datetimes timezone-aware and compare them in UTC."""
     if value.tzinfo is None:
-        value = pytz.timezone("Europe/London").localize(value)
+        value = pytz.timezone(TIMEZONE).localize(value)
 
     return value.astimezone(timezone.utc)
-                            
+
 
 def _count_occupied_places_at(
     requested_at: datetime,
     db: Session,
 ) -> int:
+    """Count sessions active at a specific point in time."""
     requested_at_utc = _normalize_datetime_to_utc(requested_at)
 
     return (
@@ -179,6 +201,7 @@ def _count_occupied_places_at(
 
 
 def _raise_for_parking_error(error: ParkingError) -> None:
+    """Translate parking domain errors into HTTP exceptions for route handlers."""
     if isinstance(error, ParkingFullError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

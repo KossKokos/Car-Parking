@@ -1,124 +1,273 @@
-# Car Parking API
+# Car Parking ANPR
 
-A FastAPI backend for a car parking management system.
+Car Parking ANPR is a parking API built around a local UK number-plate recognition pipeline.
 
-The application accepts car images, detects a number plate, tracks parking sessions, calculates parking cost, manages users and admin actions, and stores data in PostgreSQL.
+The project accepts a car image, detects the number plate, reads the plate text, and uses that result to manage parking entry, exit, payment, and parking history. The backend is included so the ML component can be used in a realistic workflow instead of staying as a standalone notebook or script.
 
-## Project background
+The main ML problem is fixed-format UK plate recognition:
 
-This repository is based on an older team project called **Car Parking**. The original version was developed as a team project. This version reflects my later personal work on refactoring, cleanup, maintenance, Docker/local development setup, and backend improvements.
+```text
+LLDDLLL
+example: AB12CDE
+```
 
-The project idea and original feature set came from the team project. The current repository is a later refactored personal version, not the untouched original team submission.
+## Navigation
 
-## Main features
+- [Why I Built It](#why-i-built-it)
+- [ML Pipeline Overview](#ml-pipeline-overview)
+- [Data and Training Utilities](#data-and-training-utilities)
+- [Application Flow](#application-flow)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Setup](#setup)
+- [Using the ANPR Flow](#using-the-anpr-flow)
+- [Running Tests](#running-tests)
+- [Docker Notes](#docker-notes)
+- [Limitations](#limitations)
+- [Future Improvements](#future-improvements)
+- [Credits](#credits)
+- [License](#license)
 
-- User registration, login, email confirmation, password reset, and logout
-- JWT access and refresh token flow
-- Role-based access for users and admins
-- Admin actions for users, cars, roles, tariffs, and bans
-- Car number plate detection from uploaded images
-- Parking entry and exit flow
-- Parking duration and cost calculation
-- Payment confirmation flow
-- Parking availability checks
-- User parking history
-- CSV export for parking history
-- Email notifications for account and parking events
-- PostgreSQL database with Alembic migrations
-- Redis support for local development
-- Swagger API documentation
-- Docker Compose setup for local PostgreSQL and Redis
+## Why I Built It
 
-## Tech stack
+This repository started from an older team project called **Car Parking**. I later revisited it as a personal project and rebuilt the parts that interested me most:
 
-- Python 3.10.8
+- a local ANPR runtime package
+- a custom CNN recogniser for UK plates
+- a detector-to-recogniser inference pipeline
+- data cleaning and metadata tools for plate crops
+- a FastAPI app that uses the ML pipeline in real parking routes
+
+The backend matters here because it gives the model a useful context: users upload car images, the system reads the plate, and the result drives parking logic.
+
+## ML Pipeline Overview
+
+The runtime pipeline handles full car images, not only cropped plates.
+
+```text
+uploaded car image
+-> temporary image file
+-> local plate detector
+-> best plate crop
+-> custom CNN recogniser
+-> 7-position decoder
+-> UK plate format validation
+-> parking workflow
+```
+
+### 1. Plate Detection
+
+The full-image detector uses `open-image-models` with the model:
+
+```text
+yolo-v9-t-256-license-plate-end2end
+```
+
+The detector returns bounding boxes for number plates. The app keeps the highest-confidence detection, adds a small amount of padding, and crops the plate before recognition.
+
+Relevant code:
+
+```text
+uk_plate_recognition/src/anpr/detection/open_image_models_detector.py
+uk_plate_recognition/src/anpr/inference/open_image_models_pipeline.py
+```
+
+### 2. Plate Recognition
+
+The recogniser is a custom PyTorch CNN for fixed-format UK plates.
+
+Instead of treating the whole plate as one class, the model predicts each character position separately:
+
+```text
+position 0 -> letter, 26 classes
+position 1 -> letter, 26 classes
+position 2 -> digit, 10 classes
+position 3 -> digit, 10 classes
+position 4 -> letter, 26 classes
+position 5 -> letter, 26 classes
+position 6 -> letter, 26 classes
+```
+
+This makes the output match the known UK plate structure and keeps the model small enough for local inference.
+
+Relevant code:
+
+```text
+uk_plate_recognition/src/anpr/models/plate_cnn.py
+uk_plate_recognition/src/anpr/data/encoders.py
+uk_plate_recognition/src/anpr/inference/decode.py
+```
+
+### 3. Decoding and Validation
+
+The raw model outputs are decoded into a plate string. The prediction is then checked using:
+
+- exact fixed UK format: `LLDDLLL`
+- average confidence across all positions
+- per-position confidence thresholds
+
+The API runtime currently uses:
+
+```text
+minimum overall confidence: 0.95
+minimum position confidence: 0.80
+```
+
+If the prediction does not pass these checks, the parking route treats the plate as not found.
+
+Relevant code:
+
+```text
+uk_plate_recognition/src/anpr/inference/result.py
+uk_plate_recognition/src/anpr/validation/uk_plate.py
+car_parking/src/services/anpr_service.py
+car_parking/src/services/plate_reader.py
+```
+
+## Data and Training Utilities
+
+The `uk_plate_recognition` package contains tools for building and testing the recogniser:
+
+- filename-based label parsing for UK plates
+- metadata CSV generation
+- train/validation/test split assignment
+- PyTorch dataset loading
+- conservative image augmentation for plate crops
+- multi-head cross-entropy loss
+- full-plate and per-position evaluation metrics
+- scripts for scraping, registering, cleaning, filtering, and deduplicating plate crops
+
+The training code is organized as reusable modules rather than one large training script. This keeps the package easier to test and reuse from notebooks or future CLI scripts.
+
+Important modules:
+
+```text
+uk_plate_recognition/src/anpr/data/
+uk_plate_recognition/src/anpr/training/
+uk_plate_recognition/src/anpr/evaluation/
+uk_plate_recognition/src/anpr/scraping/
+```
+
+## Application Flow
+
+The FastAPI app uses the ANPR package in the parking routes.
+
+Typical entry flow:
+
+```text
+POST /api/parking/enter
+-> upload car image
+-> read license plate
+-> check whether the car is banned
+-> create parking session
+-> update occupied space count
+-> send parking entry email for registered users
+```
+
+Typical exit flow:
+
+```text
+POST /api/parking/exit
+-> upload car image
+-> read license plate
+-> find active parking session
+-> calculate duration and cost
+-> send invoice email for registered users
+```
+
+The backend also includes user accounts, JWT authentication, admin actions, tariffs, parking availability, email templates, and CSV export. Those features support the parking workflow, but the main technical focus of this repository is the ML pipeline and how it is integrated into the app.
+
+## Tech Stack
+
+### ML and Computer Vision
+
+- PyTorch
+- OpenCV
+- NumPy
+- Albumentations
+- Open Image Models
+
+### Backend
+
 - FastAPI
 - SQLAlchemy
 - Alembic
-- PostgreSQL
-- Redis
 - Pydantic v1
-- Poetry
-- Uvicorn
-- OpenCV
-- TensorFlow / Keras
-- Pillow
-- NumPy
+- PostgreSQL
+- Redis for health/infrastructure checks
 - FastAPI Mail
-- Docker / Docker Compose
 
-## Project structure
+### Tooling
+
+- Poetry
+- Docker / Docker Compose
+- Pytest
+
+## Project Structure
 
 ```text
-Car-Parking-Project/
-├── car_parking/
-│   ├── migrations/          # Alembic migrations
-│   ├── src/
-│   │   ├── conf/            # settings, constants, config helpers
-│   │   ├── database/        # SQLAlchemy engine, session, models
-│   │   ├── models/          # ML/OCR model files
-│   │   ├── repository/      # database operations
-│   │   ├── routes/          # FastAPI routes
-│   │   ├── schemas/         # Pydantic request/response models
-│   │   ├── services/        # auth, email, OCR, roles, domain services
-│   │   ├── templates/       # email templates
-│   │   └── utils/           # shared helpers
-│   ├── alembic.ini
-│   └── .example.env
-├── docker-compose.yml       # local PostgreSQL and Redis
-├── Dockerfile               # API image build
-├── main.py                  # app entrypoint
-├── pyproject.toml
-├── poetry.lock
-└── README.md
+Car-Parking/
+|-- car_parking/
+|   |-- migrations/                 # Alembic migrations
+|   `-- src/
+|       |-- routes/                 # FastAPI routes
+|       |-- repository/             # database operations
+|       |-- services/               # auth, email, ANPR app integration
+|       |-- schemas/                # Pydantic schemas
+|       |-- database/               # SQLAlchemy models and sessions
+|       |-- templates/              # email templates
+|       `-- utils/                  # shared backend helpers
+|
+|-- uk_plate_recognition/
+|   |-- src/anpr/
+|   |   |-- data/                   # labels, metadata, dataset, transforms
+|   |   |-- detection/              # full-image plate detector wrapper
+|   |   |-- models/                 # custom CNN recogniser
+|   |   |-- inference/              # decoding and runtime pipelines
+|   |   |-- training/               # loss and train/eval loops
+|   |   |-- evaluation/             # recognition metrics
+|   |   |-- validation/             # UK plate validation
+|   |   `-- scraping/               # dataset collection/cleaning utilities
+|   |-- checkpoints/                # trained recogniser checkpoints
+|   |-- data/                       # local metadata and image data
+|   `-- tests/                      # ANPR tests
+|
+|-- docker-compose.yml              # local PostgreSQL and Redis
+|-- Dockerfile                      # API image build
+|-- main.py                         # FastAPI entrypoint
+|-- pyproject.toml
+`-- README.md
 ```
 
-## Local setup
+## Setup
 
-### 1. Clone the repository
-
-```bash
-git clone <repository-url>
-cd Car-Parking-Project
-```
-
-### 2. Install dependencies
-
-This project uses Poetry as the main dependency workflow.
+Install the project dependencies:
 
 ```bash
 poetry install
 ```
 
-### 3. Create environment file
+Create a `.env` file from `.example.env` and fill in the required values.
 
-Create a local environment file based on the example file.
+For local development with Docker Compose, the database settings normally match:
 
-Depending on your current config path, use the same location expected by `car_parking/src/conf/config.py`.
+```env
+POSTGRES_DB=car_parking_dev_db
+POSTGRES_USER=car_parking_user
+POSTGRES_PASSWORD=car_parking_password
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5433
+SQLALCHEMY_DATABASE_URL=postgresql://car_parking_user:car_parking_password@localhost:5433/car_parking_dev_db
+REDIS_URL=redis://localhost:6380/0
+```
 
-
-Do not commit real `.env` files.
-
-## Running locally
-
-### 1. Start PostgreSQL and Redis
+Start local services:
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
-
-- PostgreSQL on `localhost:5433`
-- Redis on `localhost:6380`
-
-Check containers:
-
-```bash
-docker ps
-```
-
-### 2. Run database migrations
+Run database migrations:
 
 ```bash
 cd car_parking
@@ -126,111 +275,82 @@ poetry run alembic upgrade head
 cd ..
 ```
 
-### 3. Start the API
+Start the API:
 
 ```bash
 poetry run python main.py
 ```
 
-The API should be available at:
+Default local URLs:
 
 ```text
-http://localhost:80
+API:     http://localhost:80
+Swagger: http://localhost:80/docs
 ```
 
-Swagger documentation:
+## Using the ANPR Flow
+
+The easiest way to inspect the project is through Swagger:
 
 ```text
-http://localhost:80/docs
+POST /api/parking/enter
+POST /api/parking/exit
 ```
 
-Health checks:
+Both routes accept an uploaded image file. The app saves the upload temporarily, runs the full-image ANPR pipeline, then removes the temporary file.
+
+The runtime recogniser checkpoint used by the API is:
 
 ```text
-GET /health
-GET /health/db
+uk_plate_recognition/checkpoints/custom_data_cnn_v2/plate_cnn_final.pt
 ```
 
-## Docker usage
+## Running Tests
 
-The current `docker-compose.yml` is used for local PostgreSQL and Redis.
-
-To reset local containers and volumes:
+The ANPR package has focused tests for the ML/data code:
 
 ```bash
-docker compose down -v --remove-orphans
-docker compose up -d
+cd uk_plate_recognition
+poetry install --with dev
+poetry run pytest
 ```
 
-To build the API image:
+The tests cover label encoding/decoding, UK plate validation, metrics, image preprocessing, loss validation, model output shape, prediction helpers, and train/evaluation loops.
+
+## Docker Notes
+
+The provided `docker-compose.yml` runs PostgreSQL and Redis for local development.
+
+The API image can be built with:
 
 ```bash
 docker build -t car-parking-api .
 ```
 
-If you run the API as a Docker container, do not use `localhost` for database and Redis hostnames inside the container. Use Docker service names instead:
+The Dockerfile copies the runtime ANPR package and the final recogniser checkpoint into the image.
+
+If the API runs inside Docker, use Docker service names instead of `localhost`:
 
 ```env
 SQLALCHEMY_DATABASE_URL=postgresql://car_parking_user:car_parking_password@car_parking_postgres:5432/car_parking_dev_db
-REDIS_HOST=car_parking_redis
-REDIS_PORT=6379
 REDIS_URL=redis://car_parking_redis:6379/0
 ```
 
-Then run the API container on the same Docker network as the Compose services.
+## Limitations
 
-## API overview
+- The recogniser is designed for fixed-format UK plates in `LLDDLLL` format.
+- Recognition quality depends strongly on image quality and detector crop quality.
+- The backend is a portfolio/demo application, not a production parking system.
+- Training utilities are present, but this repository does not expose a polished one-command training CLI.
+- No model performance numbers are listed here because the repository does not include a single final benchmark report that should be treated as authoritative.
 
-Main API groups:
+## Future Improvements
 
-```text
-/auth      authentication, email confirmation, password reset, logout
-/users     current user profile and parking information
-/parking   parking entry, exit, payment confirmation, availability
-/admin     admin operations for users, cars, tariffs, CSV reports
-/health    app and database health checks
-```
-
-## Database
-
-The project uses PostgreSQL with SQLAlchemy and Alembic.
-
-Common migration command:
-
-```bash
-cd car_parking
-poetry run alembic upgrade head
-cd ..
-```
-
-The app also seeds required default parking data on startup, such as default tariffs and parking count data.
-
-## Refactoring notes
-
-This version includes later cleanup and refactoring work, including:
-
-- cleaner local PostgreSQL and Redis setup
-- Poetry-based dependency workflow
-- safer environment configuration
-- improved health checks
-- clearer database session handling
-- refactored parking flow and parking-count logic
-- fixed parking availability calculation
-- cleaner route paths for parking entry and exit
-- improved auth and refresh-token flow
-- logout now invalidates both access-token usage and stored refresh token
-- cleaner route-level error handling
-- improved admin route structure
-- cleaned schemas and response models
-- cleaned email service naming and template usage
-- repository cleanup and removal of old compatibility wrappers
-
-## Notes and limitations
-
-- This is a backend/API project. It is mainly tested through Swagger docs.
-- The OCR and number-plate detection quality depends on the uploaded image.
-- This is a portfolio/refactored project, not a production parking system.
-- The project still keeps some original structure and naming from the older team project where it makes sense.
+- Add a single reproducible training command.
+- Add a small benchmark report for the final checkpoint.
+- Add sample images and expected outputs for quick local inspection.
+- Improve error reporting for low-confidence plate predictions.
+- Add more integration tests around the image upload parking routes.
 
 ## Credits
 
@@ -244,7 +364,7 @@ Original team members:
 - Michael Ivanov (Developer)
 - Natalia Semeniuk (Developer)
 
-This repository/version was later revisited, refactored, and maintained by Kostiantyn Pereimybida as a personal continuation of the original project.
+This version was later revisited, refactored, and maintained by Kostiantyn Pereimybida as a personal continuation with a stronger focus on ANPR and ML engineering.
 
 ## License
 
