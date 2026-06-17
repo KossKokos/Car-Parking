@@ -12,6 +12,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 def find_image_files(image_dir: str | Path) -> list[Path]:
+    """Find supported image files recursively under a dataset directory."""
     image_dir = Path(image_dir)
 
     if not image_dir.exists():
@@ -25,6 +26,7 @@ def find_image_files(image_dir: str | Path) -> list[Path]:
 
 
 def make_relative_path(path: Path, root: Path) -> str:
+    """Store paths relative to the project root when possible."""
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:

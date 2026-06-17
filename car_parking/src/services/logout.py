@@ -18,6 +18,7 @@ class LogoutDependency:
         credentials: HTTPAuthorizationCredentials = Security(security),
         db: Session = Depends(get_db),
     ) -> None:
+        """Reject requests that reuse the current user's blacklisted access token."""
         blacklisted_token = await get_blacklisted_token_by_user_id(
             current_user.id,
             db,

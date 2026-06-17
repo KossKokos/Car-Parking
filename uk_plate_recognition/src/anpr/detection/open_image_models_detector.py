@@ -45,6 +45,7 @@ class PlateDetectionOutput:
 
     @property
     def best_detection(self) -> PlateBox | None:
+        """Return the highest-confidence detection, if any were produced."""
         if not self.detections:
             return None
         return max(self.detections, key=lambda d: d.confidence)
@@ -72,6 +73,7 @@ class OpenImageModelsPlateDetector:
         )
 
     def predict(self, image_or_path: str | Path | np.ndarray) -> PlateDetectionOutput:
+        """Run local plate detection and return valid boxes sorted by confidence."""
         image = self._load_image(image_or_path)
 
         raw_detections = self.detector.predict(image)
@@ -116,6 +118,7 @@ class OpenImageModelsPlateDetector:
         image_or_path: str | Path | np.ndarray,
         padding_ratio: float = 0.05,
     ) -> tuple[np.ndarray, PlateBox]:
+        """Crop the highest-confidence plate from an image or image path."""
         output = self.predict(image_or_path)
         best_detection = output.best_detection
 
@@ -132,6 +135,7 @@ class OpenImageModelsPlateDetector:
 
     @staticmethod
     def _load_image(image_or_path: str | Path | np.ndarray) -> np.ndarray:
+        """Accept either an already-loaded image array or an image path."""
         if isinstance(image_or_path, np.ndarray):
             image = image_or_path
 
@@ -158,6 +162,7 @@ class OpenImageModelsPlateDetector:
         image_width: int,
         image_height: int,
     ) -> PlateBox:
+        """Clamp a detector box so crop coordinates stay inside the image."""
         return PlateBox(
             x1=max(0, min(box.x1, image_width)),
             y1=max(0, min(box.y1, image_height)),

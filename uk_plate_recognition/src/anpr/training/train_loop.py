@@ -28,6 +28,7 @@ def _move_batch_to_device(
     batch: dict,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Move image and target tensors from a dataloader batch to the device."""
     images = batch["image"].to(device)
     targets = batch["target"].to(device)
 
@@ -38,6 +39,7 @@ def _average_position_losses(
     position_loss_totals: list[float],
     num_samples: int,
 ) -> list[float]:
+    """Convert accumulated per-position loss totals into sample averages."""
     return [
         position_loss_total / num_samples
         for position_loss_total in position_loss_totals

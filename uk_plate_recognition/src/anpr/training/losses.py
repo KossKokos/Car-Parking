@@ -78,6 +78,7 @@ class PlateMultiHeadLoss(nn.Module):
         outputs: list[torch.Tensor],
         targets: torch.Tensor,
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        """Compute average multi-head loss and keep per-position losses."""
         validate_multi_head_outputs(outputs, targets)
 
         targets = targets.long()

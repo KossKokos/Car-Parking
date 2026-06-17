@@ -93,6 +93,7 @@ def filter_input_rows(
     rows: list[dict[str, str]],
     source_name: str | None,
 ) -> list[dict[str, str]]:
+    """Keep downloaded scraped-image rows that match the optional source filter."""
     filtered = []
 
     for row in rows:
@@ -111,6 +112,7 @@ def filter_input_rows(
 
 
 def resolve_source_image_path(project_root: Path, local_path: str) -> Path:
+    """Resolve metadata local_path values against the configured project root."""
     path = Path(local_path)
 
     if path.is_absolute():
@@ -120,6 +122,7 @@ def resolve_source_image_path(project_root: Path, local_path: str) -> Path:
 
 
 def load_processed_source_paths(metadata_csv_path: Path) -> set[str]:
+    """Return source images already handled by previous crop runs."""
     if not metadata_csv_path.exists() or metadata_csv_path.stat().st_size == 0:
         return set()
 
@@ -141,6 +144,7 @@ def append_records_to_csv(
     records: list[PlateRecognizerCropRecord],
     csv_path: Path,
 ) -> None:
+    """Append crop metadata while preserving old rows and any existing columns."""
     if not records:
         return
 
@@ -180,6 +184,7 @@ def append_records_to_json(
     records: list[PlateRecognizerCropRecord],
     json_path: Path,
 ) -> None:
+    """Append crop metadata to the JSON audit log."""
     if not records:
         return
 
@@ -206,6 +211,7 @@ def make_crop_filename(
     result_index: int,
     suggested_label_clean: str | None,
 ) -> str:
+    """Create a deterministic crop filename from source image and result index."""
     label_part = suggested_label_clean or "unknown"
 
     key = f"{source_image_path}|{result_index}|{label_part}"
@@ -231,6 +237,7 @@ def crop_xyxy_with_padding(
     ymax: int,
     padding: float,
 ) -> np.ndarray:
+    """Crop an XYXY detection box with proportional padding and clipping."""
     if image is None or image.size == 0:
         raise ValueError("image cannot be empty.")
 
@@ -325,6 +332,7 @@ def extract_results(
     response: dict[str, Any],
     config: PlateRecognizerCropConfig,
 ) -> list[dict[str, Any]]:
+    """Filter Plate Recognizer API results by box validity and confidence."""
     raw_results = response.get("results", [])
 
     if not isinstance(raw_results, list):
@@ -383,6 +391,7 @@ def make_status_record(
     status: str,
     error: str | None,
 ) -> PlateRecognizerCropRecord:
+    """Build a metadata row for skipped, failed, or no-plate outcomes."""
     return PlateRecognizerCropRecord(
         source_name=row.get("source_name"),
         source_page_url=row.get("source_page_url"),
@@ -415,6 +424,7 @@ def process_one_image(
     row: dict[str, str],
     config: PlateRecognizerCropConfig,
 ) -> list[PlateRecognizerCropRecord]:
+    """Call Plate Recognizer for one scraped image and save accepted crops."""
     local_path = row.get("local_path", "")
 
     if not local_path:
@@ -570,6 +580,7 @@ def process_one_image(
 def crop_scraped_images_with_plate_recognizer(
     config: PlateRecognizerCropConfig,
 ) -> None:
+    """Batch crop scraped images using Plate Recognizer and write metadata."""
     rows = load_rows_from_csv(config.scraped_metadata_csv)
     rows = filter_input_rows(rows, source_name=config.source_name)
 

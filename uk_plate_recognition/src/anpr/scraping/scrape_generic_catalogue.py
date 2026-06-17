@@ -90,6 +90,7 @@ def parse_csv_arg(value: str | None) -> tuple[str, ...]:
 
 
 def make_safe_filename(image_url: str, content_type: str | None = None) -> str:
+    """Create a stable image filename from its URL and detected content type."""
     url_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()[:16]
     suffix = Path(urlparse(image_url).path).suffix.lower()
 
@@ -101,6 +102,7 @@ def make_safe_filename(image_url: str, content_type: str | None = None) -> str:
 
 
 def load_existing_urls(csv_path: Path) -> set[str]:
+    """Load previously scraped image URLs so repeated runs can skip them."""
     if not csv_path.exists() or csv_path.stat().st_size == 0:
         return set()
 
@@ -114,6 +116,7 @@ def load_existing_urls(csv_path: Path) -> set[str]:
 
 
 def append_records_to_csv(records: list[ScrapedImageRecord], csv_path: Path) -> None:
+    """Append scrape records while preserving existing metadata columns."""
     if not records:
         return
 
@@ -146,6 +149,7 @@ def append_records_to_csv(records: list[ScrapedImageRecord], csv_path: Path) -> 
 
 
 def append_records_to_json(records: list[ScrapedImageRecord], json_path: Path) -> None:
+    """Append scrape records to the JSON metadata log."""
     if not records:
         return
 
@@ -168,6 +172,7 @@ def append_records_to_json(records: list[ScrapedImageRecord], json_path: Path) -
 
 
 def flush_records(records: list[ScrapedImageRecord], config: GenericCatalogueScrapeConfig) -> None:
+    """Persist buffered scrape records to both metadata stores and clear them."""
     append_records_to_csv(records, config.metadata_csv_path)
     append_records_to_json(records, config.metadata_json_path)
     records.clear()
@@ -182,6 +187,7 @@ def get_attr_expr(attr_name: str) -> str:
 
 
 def extract_image_candidates(page: Page, config: GenericCatalogueScrapeConfig) -> list[dict]:
+    """Collect unique image candidates from the current browser page."""
     attr_expressions = [
         f'"{attr}": {get_attr_expr(attr)}'
         for attr in config.image_url_attrs
@@ -343,6 +349,7 @@ def dismiss_cookie_banner(page: Page) -> None:
 
 
 def open_page(page: Page, url: str, wait_selector: str, page_wait_ms: int) -> None:
+    """Open a catalogue page and wait long enough for image elements to load."""
     page.goto(url, wait_until="domcontentloaded", timeout=60_000)
 
     dismiss_cookie_banner(page)
@@ -356,13 +363,14 @@ def open_page(page: Page, url: str, wait_selector: str, page_wait_ms: int) -> No
 
 
 def get_next_url_from_attr(page: Page, selector: str, attr_name: str) -> str | None:
+    """Resolve the next-page URL from a selected element attribute."""
     element = page.query_selector(selector)
 
     if element is None:
         return None
-    print(f"Element foound: {element}")
+
     value = element.get_attribute(attr_name)
-    print(f"Value of element with attr({attr_name}): {value}")
+
     if not value:
         return None
 
@@ -370,6 +378,7 @@ def get_next_url_from_attr(page: Page, selector: str, attr_name: str) -> str | N
 
 
 def click_next_button(page: Page, selector: str, page_wait_ms: int, wait_selector: str) -> bool:
+    """Click a pagination control, returning whether navigation was attempted."""
     locator = page.locator(selector)
 
     if locator.count() == 0:
@@ -409,6 +418,7 @@ def download_image(
     timeout_seconds: float,
     referer: str,
 ) -> tuple[str, str]:
+    """Download one image atomically and return its local path and filename."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     headers = {
@@ -446,6 +456,7 @@ def download_image(
 
 
 def scrape_generic_catalogue(config: GenericCatalogueScrapeConfig) -> None:
+    """Scrape catalogue images across pages with resume-safe metadata output."""
     config.output_image_dir.mkdir(parents=True, exist_ok=True)
     config.metadata_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -581,7 +592,6 @@ def scrape_generic_catalogue(config: GenericCatalogueScrapeConfig) -> None:
                 break
 
             if config.pagination_mode == "url_attr":
-                print(config.next_button_selector)
                 if not config.next_button_selector or not config.next_url_attr:
                     print("Missing next button selector or next URL attribute. Stopping.")
                     break
@@ -676,6 +686,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_start_url(args: argparse.Namespace) -> str:
+    """Choose the explicit start URL or derive it from known source presets."""
     if args.start_url:
         return args.start_url
 

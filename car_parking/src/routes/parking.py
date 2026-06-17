@@ -41,6 +41,7 @@ router = APIRouter(prefix="/parking", tags=["parking"])
 
 
 async def _get_banned_car_message_or_none(license_plate: str, db: Session) -> str | None:
+    """Return a rejection message when a plate belongs to a banned car."""
     car = await repository_car.get_car_by_license_plate(license_plate, db)
 
     if car and car.banned is True:
@@ -57,6 +58,7 @@ async def _schedule_parking_enter_email(
     license_plate: str,
     db: Session,
 ) -> None:
+    """Queue a parking-entry email only for registered users."""
     user = await repository_users.get_user_by_car_license_plate(license_plate, db)
 
     if not user:
@@ -86,6 +88,7 @@ async def _schedule_parking_exit_email(
     license_plate: str,
     db: Session,
 ) -> None:
+    """Queue a parking-exit invoice email only for registered users."""
     user = await repository_users.get_user_by_car_license_plate(license_plate, db)
 
     if not user:
@@ -118,6 +121,7 @@ async def _handle_enter_parking(
     file: UploadFile,
     db: Session,
 ):
+    """Detect a plate from an upload and run the parking entry workflow."""
     license_plate = await _detect_license_plate_from_car_upload(file)
 
     if license_plate is None:
@@ -156,6 +160,7 @@ async def _handle_exit_parking(
     file: UploadFile,
     db: Session,
 ):
+    """Detect a plate from an upload and run the parking exit workflow."""
     license_plate = await _detect_license_plate_from_car_upload(file)
 
     if license_plate is None:
@@ -198,6 +203,7 @@ async def _handle_exit_parking(
 
 
 async def _save_uploaded_image_to_temp_file(file: UploadFile) -> Path:
+    """Persist an uploaded image temporarily for OpenCV-based plate reading."""
     valid_ext = await repository_parking.is_valid_file_ext(file)
 
     if not valid_ext:
@@ -229,6 +235,7 @@ async def _save_uploaded_image_to_temp_file(file: UploadFile) -> Path:
 
 
 async def _detect_license_plate_from_car_upload(file: UploadFile) -> str | None:
+    """Read a plate from an uploaded car image and always remove the temp file."""
     temp_image_path = await _save_uploaded_image_to_temp_file(file)
 
     try:
@@ -323,24 +330,3 @@ async def get_parking_availability(
 )
 async def get_current_parking_availability(db: Session = Depends(get_db)):
     return await repository_parking.get_current_parking_availability(db)
-
-
-@router.post(
-    "/debug/anpr",
-    status_code=status.HTTP_200_OK,
-)
-async def debug_anpr_from_car_image(
-    file: UploadFile = File(...),
-):
-    temp_image_path = await _save_uploaded_image_to_temp_file(file)
-
-    try:
-        return await PlateReader.get_prediction_report_from_car_image_path(
-            temp_image_path
-        )
-
-    finally:
-        try:
-            temp_image_path.unlink(missing_ok=True)
-        except OSError:
-            pass

@@ -1,12 +1,11 @@
-from datetime import datetime
 from typing import TypeAlias, TypedDict
 
 from pydantic import BaseModel, Field
 
 
 class ParkingResponse(BaseModel):
-    enter_time: datetime
-    departure_time: datetime | None
+    enter_time: str
+    departure_time: str | None
     license_plate: str
     amount_paid: float | None
     duration: float | None
@@ -21,7 +20,7 @@ class ParkingInfo(BaseModel):
 
 
 class CurrentParking(BaseModel):
-    enter_time: datetime
+    enter_time: str
     time_on_parking: float
     parking_cost: float
 

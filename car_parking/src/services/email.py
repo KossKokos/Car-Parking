@@ -37,6 +37,7 @@ async def _send_template_email(
     template_name: str,
     template_body: dict[str, Any],
 ) -> None:
+    """Render and send one configured HTML email template."""
     message = MessageSchema(
         subject=subject,
         recipients=[recipient],
@@ -57,10 +58,12 @@ async def _send_template_email(
 
 
 async def _create_email_token(email: EmailStr) -> str:
+    """Create the token embedded in action links sent by email."""
     return await service_auth.create_email_token({"sub": email})
 
 
 async def send_email(email: EmailStr, username: str, host: str) -> None:
+    """Send the account confirmation email."""
     token_verification = await _create_email_token(email)
 
     await _send_template_email(
@@ -80,6 +83,7 @@ async def send_reset_password_email(
     username: str,
     host: str,
 ) -> None:
+    """Send a password reset email with a time-limited action token."""
     token_verification = await _create_email_token(email)
 
     await _send_template_email(
@@ -103,6 +107,7 @@ async def parking_enter_message(
     tariff_value: int | float | str,
     host: str,
 ) -> None:
+    """Send a parking entry receipt to a registered user."""
     token_verification = await _create_email_token(email)
 
     await _send_template_email(
@@ -134,6 +139,7 @@ async def parking_exit_message(
     amount_paid: int | float | str,
     host: str,
 ) -> None:
+    """Send a parking exit invoice and payment confirmation link."""
     token_verification = await _create_email_token(email)
 
     await _send_template_email(

@@ -82,6 +82,7 @@ def normalise_class_name(value: str | None) -> str:
 
 
 def class_is_allowed(class_name: str | None) -> bool:
+    """Check whether a Roboflow class label represents a plate detection."""
     normalised_allowed = {normalise_class_name(name) for name in ALLOWED_DETECTION_CLASSES}
     return normalise_class_name(class_name) in normalised_allowed
 
@@ -95,6 +96,7 @@ def load_rows_from_csv(csv_path: Path) -> list[dict[str, str]]:
 
 
 def load_processed_source_paths(metadata_csv_path: Path) -> set[str]:
+    """Return source image paths already processed in previous runs."""
     if not metadata_csv_path.exists():
         return set()
 
@@ -108,6 +110,7 @@ def load_processed_source_paths(metadata_csv_path: Path) -> set[str]:
 
 
 def append_records_to_csv(records: list[ScrapedPlateCropRecord], csv_path: Path) -> None:
+    """Append Roboflow crop metadata to the CSV output."""
     if not records:
         return
 
@@ -128,6 +131,7 @@ def append_records_to_csv(records: list[ScrapedPlateCropRecord], csv_path: Path)
 
 
 def append_records_to_json(records: list[ScrapedPlateCropRecord], json_path: Path) -> None:
+    """Append Roboflow crop metadata to the JSON audit log."""
     if not records:
         return
 
@@ -154,6 +158,7 @@ def make_crop_filename(
     detection_index: int,
     detection_confidence: float | None,
 ) -> str:
+    """Create a deterministic Roboflow crop filename."""
     key = f"{source_image_path}|{detection_index}|{detection_confidence}"
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
     return f"{digest}_det_{detection_index}.jpg"
@@ -163,6 +168,7 @@ def call_roboflow(
     image_path: Path,
     config: RoboflowCropConfig,
 ) -> dict[str, Any]:
+    """Call the configured Roboflow detection endpoint for one image."""
     image_bytes = image_path.read_bytes()
 
     params = {
@@ -194,6 +200,7 @@ def extract_valid_detections(
     roboflow_response: dict[str, Any],
     min_detection_confidence: float,
 ) -> list[dict[str, Any]]:
+    """Filter Roboflow detections by class, confidence, and box shape."""
     predictions = roboflow_response.get("predictions", [])
 
     if not isinstance(predictions, list):
@@ -238,6 +245,7 @@ def extract_valid_detections(
 
 
 def resolve_source_image_path(project_root: Path, local_path: str) -> Path:
+    """Resolve metadata local_path values against the configured project root."""
     path = Path(local_path)
 
     if path.is_absolute():
@@ -252,6 +260,7 @@ def make_base_failure_record(
     status: str,
     error: str | None,
 ) -> ScrapedPlateCropRecord:
+    """Build a metadata row for failed or empty Roboflow outcomes."""
     return ScrapedPlateCropRecord(
         source_name=row.get("source_name"),
         source_page_url=row.get("source_page_url"),
@@ -279,6 +288,7 @@ def process_one_image(
     row: dict[str, str],
     config: RoboflowCropConfig,
 ) -> list[ScrapedPlateCropRecord]:
+    """Detect plates for one scraped image and save accepted crops."""
     local_path = row.get("local_path", "")
 
     if not local_path:
@@ -415,6 +425,7 @@ def filter_input_rows(
     rows: list[dict[str, str]],
     source_name: str | None,
 ) -> list[dict[str, str]]:
+    """Keep downloaded scraped-image rows that match the optional source filter."""
     filtered = []
 
     for row in rows:
@@ -433,6 +444,7 @@ def filter_input_rows(
 
 
 def crop_scraped_images_with_roboflow(config: RoboflowCropConfig) -> None:
+    """Batch crop scraped images using Roboflow detections and write metadata."""
     rows = load_rows_from_csv(config.scraped_metadata_csv)
     rows = filter_input_rows(rows, source_name=config.source_name)
 

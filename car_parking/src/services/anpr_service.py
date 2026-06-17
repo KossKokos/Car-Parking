@@ -25,6 +25,7 @@ MIN_POSITION_CONFIDENCE = 0.80
 
 @lru_cache(maxsize=1)
 def get_anpr_pipeline() -> OpenImageModelsANPRPipeline:
+    """Load and cache the ANPR pipeline so model startup happens once."""
     if not CHECKPOINT_PATH.exists():
         raise FileNotFoundError(f"ANPR checkpoint not found: {CHECKPOINT_PATH}")
 
@@ -40,6 +41,7 @@ def get_anpr_pipeline() -> OpenImageModelsANPRPipeline:
 
 
 def read_license_plate(image_path: str | Path) -> str:
+    """Read a plate from a full car image or raise when recognition fails."""
     result = get_anpr_pipeline().predict_from_image(image_path)
     plate = result.get("plate")
 
@@ -50,6 +52,7 @@ def read_license_plate(image_path: str | Path) -> str:
 
 
 def read_license_plate_report(image_path: str | Path) -> dict[str, Any]:
+    """Return the full ANPR decision payload used for diagnostics."""
     result = get_anpr_pipeline().predict_from_image(image_path)
 
     return {

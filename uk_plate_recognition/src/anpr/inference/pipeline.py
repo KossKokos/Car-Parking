@@ -27,6 +27,7 @@ class ANPRPipelineResult:
     detection: dict[str, Any] | None
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert the frozen pipeline result to a JSON-friendly dictionary."""
         return asdict(self)
 
 
@@ -53,6 +54,7 @@ class ANPRPipeline:
         min_overall_confidence: float = 0.80,
         min_position_confidence: float = 0.60,
     ) -> "ANPRPipeline":
+        """Load the recognizer checkpoint and wrap it in the pipeline facade."""
         recognizer = PlateRecognizer.from_checkpoint(
             checkpoint_path=checkpoint_path,
             device=device,
@@ -68,6 +70,7 @@ class ANPRPipeline:
         self,
         image_path: str | Path,
     ) -> ANPRPipelineResult:
+        """Run recognition on a cropped plate image path."""
         recognition_result = self.recognizer.predict_image_report(
             image_path=image_path,
             min_overall_confidence=self.min_overall_confidence,
@@ -82,6 +85,7 @@ class ANPRPipeline:
         self,
         recognition_result: PlateRecognitionResult,
     ) -> ANPRPipelineResult:
+        """Adapt recognizer output to the app-level ANPR result shape."""
         return ANPRPipelineResult(
             plate=recognition_result.plate,
             valid_format=recognition_result.valid_format,

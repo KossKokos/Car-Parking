@@ -60,13 +60,10 @@ def get_train_transforms(
             ),
 
             A.GaussNoise(
-                # var_limit=(5.0, 25.0),
                 p=0.20,
             ),
 
             A.ImageCompression(
-                # quality_lower=55,
-                # quality_upper=95,
                 p=0.20,
             ),
 

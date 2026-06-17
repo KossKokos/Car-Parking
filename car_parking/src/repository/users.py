@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 from sqlalchemy.orm import Session
 
-from car_parking.src.conf.constants import ADMIN_USER_ID, DEFAULT_USER_TARIFF_ID
+from car_parking.src.conf.constants import ADMIN_USER_ID, DEFAULT_USER_TARIFF_ID, TIMEZONE
 from car_parking.src.database.models import Tariff, User
 from car_parking.src.schemas.parking import CurrentParking, ParkingInfo, ParkingResponse
 from car_parking.src.schemas.users import (
@@ -21,6 +21,7 @@ from car_parking.src.services.exceptions import user_exceptions as user_exceptio
 
 
 async def create_user(body: UserModel, db: Session) -> User:
+    """Create a user with normalized plate text and the default tariff."""
     user = User(**body.dict())
     user.license_plate = user_helpers._normalize_license_plate(body.license_plate)
     user.tariff_id = DEFAULT_USER_TARIFF_ID
@@ -51,6 +52,7 @@ async def update_token(user: User, refresh_token: str, db: Session) -> None:
 
 
 async def confirmed_email(email: str, db: Session) -> None:
+    """Mark a user's email as confirmed, raising if the user is missing."""
     user = await get_user_by_email(email, db)
     
     if user is None:
@@ -90,6 +92,7 @@ async def get_user_by_car_license_plate(
 
 
 async def get_parking_info(license_plate: str, db: Session) -> ParkingInfo:
+    """Build completed parking history and aggregate totals for one car."""
     normalized_license_plate = user_helpers._normalize_license_plate(license_plate)
 
     user = await get_user_by_car_license_plate(normalized_license_plate, db)
@@ -126,6 +129,7 @@ async def get_parking_info(license_plate: str, db: Session) -> ParkingInfo:
 
 
 async def get_user_me(user: User, db: Session) -> UserParkingResponse:
+    """Return the user's profile with live parking cost when a car is parked."""
     
     user_parking = user_helpers._get_current_parking_session_by_license_plate(
         user.license_plate,
@@ -138,7 +142,7 @@ async def get_user_me(user: User, db: Session) -> UserParkingResponse:
     
     if user_parking:
         time_on_parking = calculate_parking_duration_hours(
-            user_parking.enter_time, datetime.now(pytz.timezone("Europe/Kiev"))
+            user_parking.enter_time, datetime.now(pytz.timezone(TIMEZONE))
         )
         current_cost = calculate_parking_cost(time_on_parking, tariff.tariff_value)
 

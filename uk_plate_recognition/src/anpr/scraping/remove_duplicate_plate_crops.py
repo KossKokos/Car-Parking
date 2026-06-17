@@ -31,6 +31,7 @@ def find_image_files(source_dir: Path) -> list[Path]:
 
 
 def write_report(report_path: Path, duplicate_rows: list[dict]) -> None:
+    """Write duplicate-file decisions to a CSV report."""
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
     with report_path.open("w", newline="", encoding="utf-8") as f:
@@ -53,6 +54,7 @@ def remove_duplicate_files(
     apply_changes: bool,
     delete: bool,
 ) -> None:
+    """Move or delete exact duplicate crop files after hashing their contents."""
     if not source_dir.exists():
         raise FileNotFoundError(f"Source folder does not exist: {source_dir}")
 

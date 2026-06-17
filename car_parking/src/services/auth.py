@@ -35,6 +35,7 @@ class Auth:
         scope: str,
         expires_delta: timedelta,
     ) -> str:
+        """Create a signed JWT with a scope claim used to separate token types."""
         to_encode = data.copy()
         now = datetime.utcnow()
         expire = now + expires_delta
@@ -58,6 +59,7 @@ class Auth:
         data: dict,
         expires_delta: Optional[float] = None,
     ) -> str:
+        """Create a bearer access token for authenticated API requests."""
         expire_delta = (
             timedelta(seconds=expires_delta)
             if expires_delta
@@ -75,6 +77,7 @@ class Auth:
         data: dict,
         expires_delta: Optional[float] = None,
     ) -> str:
+        """Create an access token from synchronous code paths."""
         expire_delta = (
             timedelta(seconds=expires_delta)
             if expires_delta
@@ -92,6 +95,7 @@ class Auth:
         data: dict,
         expires_delta: Optional[float] = None,
     ) -> str:
+        """Create a long-lived token that can be exchanged for new credentials."""
         expire_delta = (
             timedelta(seconds=expires_delta)
             if expires_delta
@@ -109,6 +113,7 @@ class Auth:
         token: str = Depends(oauth2_scheme),
         db: Session = Depends(get_db),
     ):
+        """Resolve the authenticated user from a valid access token."""
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -141,6 +146,7 @@ class Auth:
         return user
 
     async def decode_refresh_token(self, refresh_token: str) -> str:
+        """Validate a refresh token and return the email stored in its subject."""
         try:
             payload = jwt.decode(
                 refresh_token,
@@ -171,6 +177,7 @@ class Auth:
             ) from exc
 
     async def create_email_token(self, data: dict) -> str:
+        """Create a scoped token for email confirmation and password reset links."""
         return self._create_token(
             data=data,
             scope=constants.EMAIL_TOKEN_SCOPE,
@@ -178,6 +185,7 @@ class Auth:
         )
 
     def sync_create_email_token(self, data: dict) -> str:
+        """Create an email token from synchronous code paths."""
         return self._create_token(
             data=data,
             scope=constants.EMAIL_TOKEN_SCOPE,
@@ -185,6 +193,7 @@ class Auth:
         )
 
     async def decode_email_token(self, email_token: str) -> str:
+        """Validate an email-scoped token and return the email subject."""
         try:
             payload = jwt.decode(
                 email_token,

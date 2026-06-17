@@ -11,6 +11,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def extract_plate_label(filename: str) -> str | None:
+    """Extract an LLNNLLL plate label from the start of a crop filename."""
     match = VALID_PLATE_PATTERN.match(filename.upper())
 
     if not match:
@@ -63,6 +64,7 @@ def clean_plate_crops(
     invalid_action: str,
     apply: bool,
 ) -> None:
+    """Copy, rename, move, or delete crops based on filename plate labels."""
     image_paths = find_image_files(input_dir)
 
     valid_count = 0

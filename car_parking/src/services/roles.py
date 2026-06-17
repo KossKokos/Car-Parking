@@ -12,6 +12,7 @@ class RoleRights:
         self,
         current_user: User = Depends(service_auth.get_current_user),
     ) -> None:
+        """Reject authenticated users whose role is not allowed for a route."""
         if current_user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

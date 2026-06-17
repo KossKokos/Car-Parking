@@ -47,6 +47,7 @@ def find_image_files(image_dir: Path) -> list[Path]:
 
 
 def get_existing_local_paths(metadata_csv: Path) -> set[str]:
+    """Load existing metadata paths so local registration is idempotent."""
     if not metadata_csv.exists() or metadata_csv.stat().st_size == 0:
         return set()
 
@@ -88,6 +89,7 @@ def append_records_to_csv(
     records: list[LocalImageMetadataRecord],
     csv_path: Path,
 ) -> None:
+    """Append local-image metadata while preserving existing columns."""
     if not records:
         return
 
@@ -132,6 +134,7 @@ def register_phone_images(
     metadata_csv: Path,
     source_name: str,
 ) -> None:
+    """Register local phone images into the same metadata CSV as scraped images."""
     image_paths = find_image_files(image_dir)
     existing_local_paths = get_existing_local_paths(metadata_csv)
 

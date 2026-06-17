@@ -57,6 +57,7 @@ class PlateDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, index: int) -> dict:
+        """Load one metadata row and return tensors ready for model training."""
         row = self.df.iloc[index]
 
         image_path = self.project_root / row[self.image_path_col]
@@ -84,6 +85,7 @@ class PlateDataset(Dataset):
         }
 
     def _load_image(self, image_path: Path) -> np.ndarray:
+        """Read an image in the channel format configured for the dataset."""
         if self.grayscale:
             image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
 

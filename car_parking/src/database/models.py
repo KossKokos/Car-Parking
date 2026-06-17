@@ -95,7 +95,6 @@ class ParkingCount(Base):
 
     id = Column(Integer, primary_key=True)
     total_quantity = Column(Integer, nullable=False, default=30)
-    # Changed typo in name
     occupied_quantity = Column(Integer, default=0)
 
     def __repr__(self) -> str:
@@ -106,11 +105,6 @@ class ParkingCount(Base):
             f"occupied_quantity={self.occupied_quantity!r}"
             f")"
         )
-
-
-# Backwards-compatible alias for old imports.
-# TODO: Replace all Parking_count imports/usages with ParkingCount,
-# then remove this alias.
 
 
 class BlacklistedToken(Base):

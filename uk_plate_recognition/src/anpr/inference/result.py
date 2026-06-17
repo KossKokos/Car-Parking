@@ -25,6 +25,7 @@ class PlateRecognitionResult:
     rejection_reasons: list[str]
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert the recognition result to a JSON-friendly dictionary."""
         return asdict(self)
 
 

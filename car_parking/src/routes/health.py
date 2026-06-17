@@ -41,6 +41,7 @@ class RedisHealthResponse(BaseModel):
 
 
 def get_redis_client() -> Redis:
+    """Create a short-timeout Redis client for health checks."""
     return Redis.from_url(
         settings.REDIS_URL,
         decode_responses=True,
