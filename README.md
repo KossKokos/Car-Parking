@@ -16,6 +16,7 @@ example: AB12CDE
 - [Why I Built It](#why-i-built-it)
 - [ML Pipeline Overview](#ml-pipeline-overview)
 - [Data and Training Utilities](#data-and-training-utilities)
+- [Model Evaluation](#model-evaluation)
 - [Application Flow](#application-flow)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -147,6 +148,39 @@ uk_plate_recognition/src/anpr/training/
 uk_plate_recognition/src/anpr/evaluation/
 uk_plate_recognition/src/anpr/scraping/
 ```
+
+
+## Model Evaluation
+
+The final recogniser checkpoint was tested on a cleaned cropped-plate test split. This evaluation measures the custom CNN recogniser on already-cropped plate images, not the full end-to-end parking flow. In the full application, final ANPR quality also depends on the detector crop and the quality of the uploaded car image.
+
+Final test run:
+
+```text
+final_clean_36x124_10ep
+```
+
+| Metric | Value |
+|---|---:|
+| Test samples | 1,231 |
+| Test loss | 0.0517 |
+| Full-plate accuracy | 94.96% |
+| Regex-valid rate | 100.00% |
+| Average confidence | 99.17% |
+
+Per-position accuracy:
+
+| Position | Expected character type | Accuracy |
+|---:|---|---:|
+| 0 | Letter | 99.68% |
+| 1 | Letter | 99.59% |
+| 2 | Digit | 99.51% |
+| 3 | Digit | 98.70% |
+| 4 | Letter | 98.62% |
+| 5 | Letter | 97.24% |
+| 6 | Letter | 98.70% |
+
+The strongest result is the full-plate accuracy of **94.96%** on the cleaned cropped-plate test set. The lower score at position 5 also gives a useful direction for future dataset balancing and error analysis.
 
 ## Application Flow
 
@@ -342,12 +376,12 @@ REDIS_URL=redis://car_parking_redis:6379/0
 - Recognition quality depends strongly on image quality and detector crop quality.
 - The backend is a portfolio/demo application, not a production parking system.
 - Training utilities are present, but this repository does not expose a polished one-command training CLI.
-- No model performance numbers are listed here because the repository does not include a single final benchmark report that should be treated as authoritative.
+- The reported model evaluation is for the cleaned cropped-plate recogniser test split. Full end-to-end ANPR accuracy can be lower if the uploaded image is low quality or the detector crop is poor.
 
 ## Future Improvements
 
 - Add a single reproducible training command.
-- Add a small benchmark report for the final checkpoint.
+- Add a reproducible benchmark script for the final checkpoint.
 - Add sample images and expected outputs for quick local inspection.
 - Improve error reporting for low-confidence plate predictions.
 - Add more integration tests around the image upload parking routes.
